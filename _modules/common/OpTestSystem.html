@@ -1,0 +1,1593 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>common.OpTestSystem &#8212; op-test-framework pre-v1.0 documentation</title>
+    <link rel="stylesheet" href="../../_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript" src="../../_static/documentation_options.js"></script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+   
+  <link rel="stylesheet" href="../../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for common.OpTestSystem</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/python2</span>
+<span class="c1"># IBM_PROLOG_BEGIN_TAG</span>
+<span class="c1"># This is an automatically generated prolog.</span>
+<span class="c1">#</span>
+<span class="c1"># $Source: op-test-framework/common/OpTestSystem.py $</span>
+<span class="c1">#</span>
+<span class="c1"># OpenPOWER Automated Test Project</span>
+<span class="c1">#</span>
+<span class="c1"># Contributors Listed Below - COPYRIGHT 2015,2017</span>
+<span class="c1"># [+] International Business Machines Corp.</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1">#     http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or</span>
+<span class="c1"># implied. See the License for the specific language governing</span>
+<span class="c1"># permissions and limitations under the License.</span>
+<span class="c1">#</span>
+<span class="c1"># IBM_PROLOG_END_TAG</span>
+
+<span class="c1">## @package OpTestSystem</span>
+<span class="c1">#  System package for OpenPower testing.</span>
+<span class="c1">#</span>
+<span class="c1">#  This class encapsulates all interfaces and classes required to do end to end</span>
+<span class="c1">#  automated flashing and testing of OpenPower systems.</span>
+
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">subprocess</span>
+<span class="kn">import</span> <span class="nn">pexpect</span>
+<span class="kn">import</span> <span class="nn">socket</span>
+<span class="kn">import</span> <span class="nn">commands</span>
+
+<span class="kn">from</span> <span class="nn">OpTestFSP</span> <span class="k">import</span> <span class="n">OpTestFSP</span>
+<span class="kn">from</span> <span class="nn">OpTestConstants</span> <span class="k">import</span> <span class="n">OpTestConstants</span> <span class="k">as</span> <span class="n">BMC_CONST</span>
+<span class="kn">from</span> <span class="nn">OpTestError</span> <span class="k">import</span> <span class="n">OpTestError</span>
+<span class="kn">from</span> <span class="nn">OpTestHost</span> <span class="k">import</span> <span class="n">OpTestHost</span>
+<span class="kn">from</span> <span class="nn">OpTestUtil</span> <span class="k">import</span> <span class="n">OpTestUtil</span>
+<span class="kn">from</span> <span class="nn">OpTestSSH</span> <span class="k">import</span> <span class="n">ConsoleState</span> <span class="k">as</span> <span class="n">SSHConnectionState</span>
+
+
+<div class="viewcode-block" id="OpSystemState"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpSystemState">[docs]</a><span class="k">class</span> <span class="nc">OpSystemState</span><span class="p">():</span>
+    <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">    This class is used as an enum as to what state op-test *thinks* the host is in.</span>
+<span class="sd">    These states are used to drive a state machine in OpTestSystem.</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">UNKNOWN</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">OFF</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">IPLing</span> <span class="o">=</span> <span class="mi">2</span>
+    <span class="n">PETITBOOT</span> <span class="o">=</span> <span class="mi">3</span>
+    <span class="n">PETITBOOT_SHELL</span> <span class="o">=</span> <span class="mi">4</span>
+    <span class="n">BOOTING</span> <span class="o">=</span> <span class="mi">5</span>
+    <span class="n">OS</span> <span class="o">=</span> <span class="mi">6</span></div>
+    <span class="n">POWERING_OFF</span> <span class="o">=</span> <span class="mi">7</span>
+
+<div class="viewcode-block" id="OpTestSystem"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem">[docs]</a><span class="k">class</span> <span class="nc">OpTestSystem</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+
+    <span class="c1">## Initialize this object</span>
+    <span class="c1">#  @param i_bmcIP The IP address of the BMC</span>
+    <span class="c1">#  @param i_bmcUser The userid to log into the BMC with</span>
+    <span class="c1">#  @param i_bmcPasswd The password of the userid to log into the BMC with</span>
+    <span class="c1">#  @param i_bmcUserIpmi The userid to issue the BMC IPMI commands with</span>
+    <span class="c1">#  @param i_bmcPasswdIpmi The password of BMC IPMI userid</span>
+    <span class="c1">#</span>
+    <span class="c1"># &quot;Only required for inband tests&quot; else Default = None</span>
+    <span class="c1"># @param i_hostIP The IP address of the Host</span>
+    <span class="c1"># @param i_hostuser The userid to log into the Host</span>
+    <span class="c1"># @param i_hostPasswd The password of the userid to log into the host with</span>
+    <span class="c1">#</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>
+                 <span class="n">bmc</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">host</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                 <span class="n">state</span><span class="o">=</span><span class="n">OpSystemState</span><span class="o">.</span><span class="n">UNKNOWN</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bmc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_BMC</span> <span class="o">=</span> <span class="n">bmc</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cv_HOST</span> <span class="o">=</span> <span class="n">host</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span> <span class="o">=</span> <span class="n">bmc</span><span class="o">.</span><span class="n">get_ipmi</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rest</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bmc</span><span class="o">.</span><span class="n">get_rest_api</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">console</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bmc</span><span class="o">.</span><span class="n">get_host_console</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">util</span> <span class="o">=</span> <span class="n">OpTestUtil</span><span class="p">()</span>
+
+        <span class="c1"># We have a state machine for going in between states of the system</span>
+        <span class="c1"># initially, everything in UNKNOWN, so we reset things.</span>
+        <span class="c1"># But, we allow setting an initial state if you, say, need to</span>
+        <span class="c1"># run against an already IPLed system</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">state</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stateHandlers</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stateHandlers</span><span class="p">[</span><span class="n">OpSystemState</span><span class="o">.</span><span class="n">UNKNOWN</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">run_UNKNOWN</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stateHandlers</span><span class="p">[</span><span class="n">OpSystemState</span><span class="o">.</span><span class="n">OFF</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">run_OFF</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stateHandlers</span><span class="p">[</span><span class="n">OpSystemState</span><span class="o">.</span><span class="n">IPLing</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">run_IPLing</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stateHandlers</span><span class="p">[</span><span class="n">OpSystemState</span><span class="o">.</span><span class="n">PETITBOOT</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">run_PETITBOOT</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stateHandlers</span><span class="p">[</span><span class="n">OpSystemState</span><span class="o">.</span><span class="n">PETITBOOT_SHELL</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">run_PETITBOOT_SHELL</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stateHandlers</span><span class="p">[</span><span class="n">OpSystemState</span><span class="o">.</span><span class="n">BOOTING</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">run_BOOTING</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stateHandlers</span><span class="p">[</span><span class="n">OpSystemState</span><span class="o">.</span><span class="n">OS</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">run_OS</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stateHandlers</span><span class="p">[</span><span class="n">OpSystemState</span><span class="o">.</span><span class="n">POWERING_OFF</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">run_POWERING_OFF</span>
+
+        <span class="c1"># We track the state of loaded IPMI modules here, that way</span>
+        <span class="c1"># we only need to try the modprobe once per IPL.</span>
+        <span class="c1"># We reset as soon as we transition away from OpSystemState.OS</span>
+        <span class="c1"># a TODO is to support doing this in petitboot shell as well.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ipmiDriversLoaded</span> <span class="o">=</span> <span class="kc">False</span>
+
+<div class="viewcode-block" id="OpTestSystem.skiboot_log_on_console"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.skiboot_log_on_console">[docs]</a>    <span class="k">def</span> <span class="nf">skiboot_log_on_console</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="k">return</span> <span class="kc">True</span>
+
+<div class="viewcode-block" id="OpTestSystem.has_host_accessible_eeprom"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.has_host_accessible_eeprom">[docs]</a>    <span class="k">def</span> <span class="nf">has_host_accessible_eeprom</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="k">return</span> <span class="kc">True</span>
+
+<div class="viewcode-block" id="OpTestSystem.has_host_led_support"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.has_host_led_support">[docs]</a>    <span class="k">def</span> <span class="nf">has_host_led_support</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="k">return</span> <span class="kc">False</span>
+
+<div class="viewcode-block" id="OpTestSystem.has_centaurs_in_dt"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.has_centaurs_in_dt">[docs]</a>    <span class="k">def</span> <span class="nf">has_centaurs_in_dt</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="k">return</span> <span class="kc">True</span>
+
+<div class="viewcode-block" id="OpTestSystem.has_mtd_pnor_access"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.has_mtd_pnor_access">[docs]</a>    <span class="k">def</span> <span class="nf">has_mtd_pnor_access</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="k">return</span> <span class="kc">True</span>
+
+<div class="viewcode-block" id="OpTestSystem.host"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.host">[docs]</a>    <span class="k">def</span> <span class="nf">host</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_HOST</span>
+
+<div class="viewcode-block" id="OpTestSystem.bmc"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.bmc">[docs]</a>    <span class="k">def</span> <span class="nf">bmc</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_BMC</span>
+
+<div class="viewcode-block" id="OpTestSystem.rest"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.rest">[docs]</a>    <span class="k">def</span> <span class="nf">rest</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">rest</span>
+
+<div class="viewcode-block" id="OpTestSystem.ipmi"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.ipmi">[docs]</a>    <span class="k">def</span> <span class="nf">ipmi</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span>
+
+<div class="viewcode-block" id="OpTestSystem.get_state"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.get_state">[docs]</a>    <span class="k">def</span> <span class="nf">get_state</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="p">;</span>
+
+<div class="viewcode-block" id="OpTestSystem.set_state"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.set_state">[docs]</a>    <span class="k">def</span> <span class="nf">set_state</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">state</span>
+
+<div class="viewcode-block" id="OpTestSystem.goto_state"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.goto_state">[docs]</a>    <span class="k">def</span> <span class="nf">goto_state</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
+        <span class="nb">print</span> <span class="s2">&quot;OpTestSystem START STATE: </span><span class="si">%s</span><span class="s2"> (target </span><span class="si">%s</span><span class="s2">)&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="p">,</span> <span class="n">state</span><span class="p">)</span>
+        <span class="n">never_unknown</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">while</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">state</span> <span class="o">!=</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">UNKNOWN</span><span class="p">:</span>
+                <span class="n">never_unknown</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">stateHandlers</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="p">](</span><span class="n">state</span><span class="p">)</span>
+            <span class="nb">print</span> <span class="s2">&quot;OpTestSystem TRANSITIONED TO: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">state</span> <span class="o">==</span> <span class="n">state</span><span class="p">:</span>
+                <span class="k">break</span><span class="p">;</span>
+            <span class="k">if</span> <span class="n">never_unknown</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">state</span> <span class="o">==</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">UNKNOWN</span><span class="p">:</span></div>
+                <span class="k">raise</span> <span class="s1">&#39;System State transition failure: should not have progressed to UNKNOWN!&#39;</span>
+
+<div class="viewcode-block" id="OpTestSystem.run_UNKNOWN"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.run_UNKNOWN">[docs]</a>    <span class="k">def</span> <span class="nf">run_UNKNOWN</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sys_power_off</span><span class="p">()</span></div>
+        <span class="k">return</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">POWERING_OFF</span>
+
+<div class="viewcode-block" id="OpTestSystem.run_OFF"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.run_OFF">[docs]</a>    <span class="k">def</span> <span class="nf">run_OFF</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">state</span> <span class="o">==</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">OFF</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">OFF</span>
+        <span class="k">if</span> <span class="n">state</span> <span class="o">==</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">UNKNOWN</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="s2">&quot;Can&#39;t trasition to UNKNOWN state&quot;</span>
+
+        <span class="c1"># We clear any possible errors at this stage</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sys_sdr_clear</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">state</span> <span class="o">==</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">OS</span><span class="p">:</span>
+            <span class="c1"># By default auto-boot will be enabled, set no override</span>
+            <span class="c1"># otherwise system endup booting in default disk.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sys_set_bootdev_no_override</span><span class="p">()</span>
+            <span class="c1">#self.cv_IPMI.ipmi_set_boot_to_disk()</span>
+        <span class="k">if</span> <span class="n">state</span> <span class="o">==</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">PETITBOOT</span> <span class="ow">or</span> <span class="n">state</span> <span class="o">==</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">PETITBOOT_SHELL</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sys_set_bootdev_setup</span><span class="p">()</span>
+
+        <span class="n">r</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sys_power_on</span><span class="p">()</span>
+        <span class="c1"># Only retry once</span>
+        <span class="k">if</span> <span class="n">r</span> <span class="o">==</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span><span class="p">:</span>
+            <span class="n">r</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sys_power_on</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">r</span> <span class="o">==</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="s1">&#39;Failed powering on system&#39;</span></div>
+        <span class="k">return</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">IPLing</span>
+
+<div class="viewcode-block" id="OpTestSystem.run_IPLing"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.run_IPLing">[docs]</a>    <span class="k">def</span> <span class="nf">run_IPLing</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">state</span> <span class="o">==</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">OFF</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sys_power_off</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">POWERING_OFF</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">wait_for_petitboot</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">pexpect</span><span class="o">.</span><span class="n">TIMEOUT</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sys_sel_check</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">UNKNOWN</span>
+
+        <span class="c1"># Once reached to petitboot check for any SEL events</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sys_sel_check</span><span class="p">()</span></div>
+        <span class="k">return</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">PETITBOOT</span>
+
+<div class="viewcode-block" id="OpTestSystem.run_PETITBOOT"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.run_PETITBOOT">[docs]</a>    <span class="k">def</span> <span class="nf">run_PETITBOOT</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">state</span> <span class="o">==</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">PETITBOOT</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">PETITBOOT</span>
+        <span class="k">if</span> <span class="n">state</span> <span class="o">==</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">PETITBOOT_SHELL</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">petitboot_exit_to_shell</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">PETITBOOT_SHELL</span>
+
+        <span class="k">if</span> <span class="n">state</span> <span class="o">==</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">OFF</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sys_power_off</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">POWERING_OFF</span>
+
+        <span class="k">if</span> <span class="n">state</span> <span class="o">==</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">OS</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">wait_for_kexec</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">BOOTING</span>
+</div>
+        <span class="k">raise</span> <span class="s1">&#39;Invalid state transition&#39;</span>
+
+<div class="viewcode-block" id="OpTestSystem.run_PETITBOOT_SHELL"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.run_PETITBOOT_SHELL">[docs]</a>    <span class="k">def</span> <span class="nf">run_PETITBOOT_SHELL</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">state</span> <span class="o">==</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">PETITBOOT_SHELL</span><span class="p">:</span>
+            <span class="n">console</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">console</span><span class="o">.</span><span class="n">get_console</span><span class="p">()</span>
+            <span class="n">console</span><span class="o">.</span><span class="n">sendcontrol</span><span class="p">(</span><span class="s1">&#39;l&#39;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">PETITBOOT_SHELL</span>
+
+        <span class="k">if</span> <span class="n">state</span> <span class="o">==</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">PETITBOOT</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">exit_petitboot_shell</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">PETITBOOT</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">sys_power_off</span><span class="p">()</span></div>
+        <span class="k">return</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">POWERING_OFF</span>
+
+<div class="viewcode-block" id="OpTestSystem.run_BOOTING"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.run_BOOTING">[docs]</a>    <span class="k">def</span> <span class="nf">run_BOOTING</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
+        <span class="n">rc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">wait_for_login</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">rc</span> <span class="o">!=</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span><span class="p">:</span>
+            <span class="c1"># Wait for ip to ping as we run host commands immediately</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">PingFunc</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cv_HOST</span><span class="o">.</span><span class="n">ip</span><span class="p">,</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">PING_RETRY_POWERCYCLE</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">OS</span></div>
+        <span class="k">return</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">UNKNOWN</span>
+
+<div class="viewcode-block" id="OpTestSystem.run_OS"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.run_OS">[docs]</a>    <span class="k">def</span> <span class="nf">run_OS</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">state</span> <span class="o">==</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">OS</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">OS</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ipmiDriversLoaded</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sys_power_off</span><span class="p">()</span></div>
+        <span class="k">return</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">POWERING_OFF</span>
+
+<div class="viewcode-block" id="OpTestSystem.run_POWERING_OFF"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.run_POWERING_OFF">[docs]</a>    <span class="k">def</span> <span class="nf">run_POWERING_OFF</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
+        <span class="n">rc</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sys_wait_for_standby_state</span><span class="p">(</span><span class="n">BMC_CONST</span><span class="o">.</span><span class="n">SYSTEM_STANDBY_STATE_DELAY</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">rc</span> <span class="o">==</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;System is in standby/Soft-off state&quot;</span>
+        <span class="k">elif</span> <span class="n">rc</span> <span class="o">==</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_PARAMETER</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Host Status sensor is not available/Skipping stand-by state check&quot;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">l_msg</span> <span class="o">=</span> <span class="s2">&quot;System failed to reach standby/Soft-off state&quot;</span>
+            <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="n">l_msg</span><span class="p">)</span>
+        <span class="nb">print</span> <span class="n">msg</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cv_HOST</span><span class="o">.</span><span class="n">ssh</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">SSHConnectionState</span><span class="o">.</span><span class="n">DISCONNECTED</span></div>
+        <span class="k">return</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">OFF</span>
+
+<div class="viewcode-block" id="OpTestSystem.load_ipmi_drivers"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.load_ipmi_drivers">[docs]</a>    <span class="k">def</span> <span class="nf">load_ipmi_drivers</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">force</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">ipmiDriversLoaded</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">force</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="c1"># Get OS level</span>
+        <span class="n">l_oslevel</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_HOST</span><span class="o">.</span><span class="n">host_get_OS_Level</span><span class="p">()</span>
+
+        <span class="c1"># Get kernel version</span>
+        <span class="n">l_kernel</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_HOST</span><span class="o">.</span><span class="n">host_get_kernel_version</span><span class="p">()</span>
+
+        <span class="c1"># Checking for ipmitool command and package</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cv_HOST</span><span class="o">.</span><span class="n">host_check_command</span><span class="p">(</span><span class="s2">&quot;ipmitool&quot;</span><span class="p">)</span>
+
+        <span class="n">l_pkg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_HOST</span><span class="o">.</span><span class="n">host_check_pkg_for_utility</span><span class="p">(</span><span class="n">l_oslevel</span><span class="p">,</span> <span class="s2">&quot;ipmitool&quot;</span><span class="p">)</span>
+        <span class="nb">print</span> <span class="s2">&quot;Installed package: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">l_pkg</span>
+
+        <span class="c1"># loading below ipmi modules based on config option</span>
+        <span class="c1"># ipmi_devintf, ipmi_powernv and ipmi_masghandler</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cv_HOST</span><span class="o">.</span><span class="n">host_load_module_based_on_config</span><span class="p">(</span><span class="n">l_kernel</span><span class="p">,</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">CONFIG_IPMI_DEVICE_INTERFACE</span><span class="p">,</span>
+                                                      <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">IPMI_DEV_INTF</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cv_HOST</span><span class="o">.</span><span class="n">host_load_module_based_on_config</span><span class="p">(</span><span class="n">l_kernel</span><span class="p">,</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">CONFIG_IPMI_POWERNV</span><span class="p">,</span>
+                                                      <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">IPMI_POWERNV</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cv_HOST</span><span class="o">.</span><span class="n">host_load_module_based_on_config</span><span class="p">(</span><span class="n">l_kernel</span><span class="p">,</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">CONFIG_IPMI_HANDLER</span><span class="p">,</span>
+                                                      <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">IPMI_MSG_HANDLER</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ipmiDriversLoaded</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="nb">print</span> <span class="s2">&quot;IPMI drivers loaded&quot;</span></div>
+        <span class="k">return</span>
+
+    <span class="c1"># Login to the host on the console</span>
+    <span class="c1"># This will behave correctly even if already logged in</span>
+<div class="viewcode-block" id="OpTestSystem.host_console_login"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.host_console_login">[docs]</a>    <span class="k">def</span> <span class="nf">host_console_login</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># we act on the raw pexpect console</span>
+        <span class="n">l_con</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bmc</span><span class="o">.</span><span class="n">get_host_console</span><span class="p">()</span><span class="o">.</span><span class="n">get_console</span><span class="p">()</span>
+        <span class="n">l_user</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_HOST</span><span class="o">.</span><span class="n">username</span><span class="p">()</span>
+        <span class="n">l_pwd</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_HOST</span><span class="o">.</span><span class="n">password</span><span class="p">()</span>
+
+        <span class="n">l_con</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\r</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">l_rc</span> <span class="o">=</span> <span class="n">l_con</span><span class="o">.</span><span class="n">expect_exact</span><span class="p">(</span><span class="n">BMC_CONST</span><span class="o">.</span><span class="n">IPMI_CONSOLE_EXPECT_ENTER_OUTPUT</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">120</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">l_rc</span> <span class="o">==</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">IPMI_CONSOLE_EXPECT_LOGIN</span><span class="p">:</span>
+            <span class="n">l_con</span><span class="o">.</span><span class="n">sendline</span><span class="p">(</span><span class="n">l_user</span><span class="p">)</span>
+            <span class="n">l_rc</span> <span class="o">=</span> <span class="n">l_con</span><span class="o">.</span><span class="n">expect</span><span class="p">([</span><span class="sa">r</span><span class="s2">&quot;[Pp]assword:&quot;</span><span class="p">,</span> <span class="n">pexpect</span><span class="o">.</span><span class="n">TIMEOUT</span><span class="p">,</span> <span class="n">pexpect</span><span class="o">.</span><span class="n">EOF</span><span class="p">],</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">120</span><span class="p">)</span>
+            <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.5</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">l_rc</span> <span class="o">==</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">IPMI_CONSOLE_EXPECT_PASSWORD</span><span class="p">:</span>
+                <span class="n">l_con</span><span class="o">.</span><span class="n">sendline</span><span class="p">(</span><span class="n">l_pwd</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">l_msg</span> <span class="o">=</span> <span class="s2">&quot;Error: host login failed&quot;</span>
+                <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="n">l_msg</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">l_rc</span> <span class="ow">in</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">IPMI_CONSOLE_EXPECT_PETITBOOT</span><span class="p">:</span>
+            <span class="n">l_msg</span> <span class="o">=</span> <span class="s2">&quot;Error: system is at petitboot&quot;</span>
+            <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="n">l_msg</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">l_rc</span> <span class="ow">in</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">IPMI_CONSOLE_EXPECT_RANDOM_STATE</span><span class="p">:</span>
+            <span class="n">l_msg</span> <span class="o">=</span> <span class="s2">&quot;Error: system is in random state&quot;</span>
+            <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="n">l_msg</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">l_rc</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;#&quot;</span><span class="p">]:</span>
+            <span class="c1"># already at root prompt, success!</span>
+            <span class="k">return</span>
+        <span class="k">elif</span> <span class="n">l_rc</span> <span class="ow">in</span> <span class="p">[</span><span class="n">pexpect</span><span class="o">.</span><span class="n">TIMEOUT</span><span class="p">,</span> <span class="n">pexpect</span><span class="o">.</span><span class="n">EOF</span><span class="p">]:</span>
+            <span class="nb">print</span> <span class="n">l_con</span><span class="o">.</span><span class="n">before</span>
+            <span class="k">raise</span> <span class="s2">&quot;Timeout/EOF waiting for SOL response&quot;</span>
+        <span class="k">elif</span> <span class="n">l_rc</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;$&quot;</span><span class="p">]:</span>
+            <span class="k">pass</span> <span class="c1"># fallthrough and sudo into a root shell</span>
+        <span class="n">l_con</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\r</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">l_rc</span> <span class="o">=</span> <span class="n">l_con</span><span class="o">.</span><span class="n">expect_exact</span><span class="p">([</span><span class="s1">&#39;$&#39;</span><span class="p">,</span><span class="s1">&#39;#&#39;</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">l_rc</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">l_con</span><span class="o">.</span><span class="n">sendline</span><span class="p">(</span><span class="s1">&#39;sudo -s&#39;</span><span class="p">)</span>
+            <span class="n">l_con</span><span class="o">.</span><span class="n">expect</span><span class="p">(</span><span class="s2">&quot;password for&quot;</span><span class="p">)</span>
+            <span class="n">l_con</span><span class="o">.</span><span class="n">sendline</span><span class="p">(</span><span class="n">l_pwd</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">host_console_unique_prompt</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="n">l_rc</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Invalid response to newline. expected $ or # prompt, got: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">l_con</span><span class="o">.</span><span class="n">before</span><span class="p">))</span>
+</div>
+        <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span>
+
+<div class="viewcode-block" id="OpTestSystem.host_console_unique_prompt"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.host_console_unique_prompt">[docs]</a>    <span class="k">def</span> <span class="nf">host_console_unique_prompt</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># We do things to the raw pexpect here</span>
+        <span class="c1"># Must be logged in or at petitboot shell</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bmc</span><span class="o">.</span><span class="n">get_host_console</span><span class="p">()</span><span class="o">.</span><span class="n">get_console</span><span class="p">()</span>
+        <span class="n">p</span><span class="o">.</span><span class="n">sendcontrol</span><span class="p">(</span><span class="s1">&#39;l&#39;</span><span class="p">)</span>
+        <span class="n">p</span><span class="o">.</span><span class="n">expect</span><span class="p">(</span><span class="sa">r</span><span class="s1">&#39;.+#&#39;</span><span class="p">)</span>
+        <span class="n">p</span><span class="o">.</span><span class="n">sendline</span><span class="p">(</span><span class="s1">&#39;PS1=[console-pexpect]\#&#39;</span><span class="p">)</span>
+        <span class="n">p</span><span class="o">.</span><span class="n">expect</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span> <span class="c1"># from us, because echo</span>
+        <span class="n">l_rc</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">expect</span><span class="p">(</span><span class="s2">&quot;\[console-pexpect\]#$&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">l_rc</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="nb">print</span> <span class="s2">&quot;Shell prompt changed&quot;</span>
+        <span class="k">else</span><span class="p">:</span></div>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Failed during change of shell prompt&quot;</span><span class="p">)</span>
+
+
+    <span class="c1">############################################################################</span>
+    <span class="c1"># System Interfaces</span>
+    <span class="c1">############################################################################</span>
+
+<div class="viewcode-block" id="OpTestSystem.sys_sdr_clear"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_sdr_clear">[docs]</a>    <span class="k">def</span> <span class="nf">sys_sdr_clear</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">        Clear all SDRs in the System</span>
+
+<span class="sd">        Returns BMC_CONST.FW_SUCCESS or BMC_CONST.FW_FAILED</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">rc</span> <span class="o">=</span>  <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_sdr_clear</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">BMC_CONST</span><span class="o">.</span><span class="n">LONG_WAIT_IPL</span><span class="p">)</span>
+            <span class="nb">print</span> <span class="p">(</span><span class="s2">&quot;Retry clearing SDR&quot;</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">rc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_sdr_clear</span><span class="p">()</span>
+            <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span></div>
+        <span class="k">return</span> <span class="n">rc</span>
+
+<div class="viewcode-block" id="OpTestSystem.sys_power_on"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_power_on">[docs]</a>    <span class="k">def</span> <span class="nf">sys_power_on</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">        Power on the host system, probably via `ipmitool power on`</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">rc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_power_on</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span></div>
+        <span class="k">return</span> <span class="n">rc</span>
+
+<div class="viewcode-block" id="OpTestSystem.sys_power_cycle"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_power_cycle">[docs]</a>    <span class="k">def</span> <span class="nf">sys_power_cycle</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">        Power cycle the host, most likely `ipmitool power cycle`</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_power_cycle</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span></div>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+
+<div class="viewcode-block" id="OpTestSystem.sys_power_soft"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_power_soft">[docs]</a>    <span class="k">def</span> <span class="nf">sys_power_soft</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">        Soft power cycle the system. This allows OS to gracefully shutdown</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">rc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_power_soft</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span></div>
+        <span class="k">return</span> <span class="n">rc</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Power off the system</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or BMC_CONST.FW_FAILED</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_power_off"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_power_off">[docs]</a>    <span class="k">def</span> <span class="nf">sys_power_off</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">rc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_power_off</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span></div>
+        <span class="k">return</span> <span class="n">rc</span>
+
+<div class="viewcode-block" id="OpTestSystem.sys_set_bootdev_setup"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_set_bootdev_setup">[docs]</a>    <span class="k">def</span> <span class="nf">sys_set_bootdev_setup</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_set_boot_to_petitboot</span><span class="p">()</span>
+
+<div class="viewcode-block" id="OpTestSystem.sys_set_bootdev_no_override"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_set_bootdev_no_override">[docs]</a>    <span class="k">def</span> <span class="nf">sys_set_bootdev_no_override</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_set_no_override</span><span class="p">()</span>
+
+<div class="viewcode-block" id="OpTestSystem.sys_power_reset"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_power_reset">[docs]</a>    <span class="k">def</span> <span class="nf">sys_power_reset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_power_reset</span><span class="p">()</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Warm reset on the bmc system</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or BMC_CONST.FW_FAILED</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_warm_reset"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_warm_reset">[docs]</a>    <span class="k">def</span> <span class="nf">sys_warm_reset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">rc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_warm_reset</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span></div>
+        <span class="k">return</span> <span class="n">rc</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Cold reset on the bmc system</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or BMC_CONST.FW_FAILED</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_cold_reset_bmc"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_cold_reset_bmc">[docs]</a>    <span class="k">def</span> <span class="nf">sys_cold_reset_bmc</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">rc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_cold_reset</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span></div>
+        <span class="k">return</span> <span class="n">rc</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Cold reset on the Host</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or BMC_CONST.FW_FAILED</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_host_cold_reset"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_host_cold_reset">[docs]</a>    <span class="k">def</span> <span class="nf">sys_host_cold_reset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">l_rc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sys_bmc_power_on_validate_host</span><span class="p">()</span>
+            <span class="k">if</span><span class="p">(</span><span class="n">l_rc</span> <span class="o">!=</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_HOST</span><span class="o">.</span><span class="n">host_cold_reset</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+</div>
+        <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Wait for boot to end based on serial over lan output data</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or BMC_CONST.FW_FAILED</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_ipl_wait_for_working_state"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_ipl_wait_for_working_state">[docs]</a>    <span class="k">def</span> <span class="nf">sys_ipl_wait_for_working_state</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">i_timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">rc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipl_wait_for_working_state</span><span class="p">(</span><span class="n">i_timeout</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span></div>
+        <span class="k">return</span> <span class="n">rc</span>
+
+<div class="viewcode-block" id="OpTestSystem.sys_ipmi_ipl_wait_for_login"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_ipmi_ipl_wait_for_login">[docs]</a>    <span class="k">def</span> <span class="nf">sys_ipmi_ipl_wait_for_login</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">i_timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">):</span>
+        <span class="n">l_con</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">console</span><span class="o">.</span><span class="n">get_console</span><span class="p">()</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">rc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_ipl_wait_for_login</span><span class="p">(</span><span class="n">l_con</span><span class="p">,</span> <span class="n">i_timeout</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span></div>
+        <span class="k">return</span> <span class="n">rc</span>
+
+<div class="viewcode-block" id="OpTestSystem.sys_wait_for_standby_state"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_wait_for_standby_state">[docs]</a>    <span class="k">def</span> <span class="nf">sys_wait_for_standby_state</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_timeout</span><span class="o">=</span><span class="mi">120</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">        Wait for system to reach standby or[S5/G2: soft-off]</span>
+
+<span class="sd">        :param i_timeout: The number of seconds to wait for system to reach standby, i.e. How long to poll the ACPI sensor for soft-off state before giving up.</span>
+<span class="sd">        :rtype: BMC_CONST.FW_SUCCESS or BMC_CONST.FW_FAILED</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">l_rc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_wait_for_standby_state</span><span class="p">(</span><span class="n">i_timeout</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span></div>
+        <span class="k">return</span> <span class="n">l_rc</span>
+
+<div class="viewcode-block" id="OpTestSystem.sys_wait_for_os_boot_complete"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_wait_for_os_boot_complete">[docs]</a>    <span class="k">def</span> <span class="nf">sys_wait_for_os_boot_complete</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">        Wait for system boot to host OS, It uses OS Boot sensor</span>
+
+<span class="sd">        :param i_timeout: The number of minutes to wait for IPL to complete or Boot time,</span>
+<span class="sd">            i.e. How long to poll the OS Boot sensor for working state before giving up.</span>
+<span class="sd">        :rtype: BMC_CONST.FW_SUCCESS or BMC_CONST.FW_FAILED</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">l_rc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_wait_for_os_boot_complete</span><span class="p">(</span><span class="n">i_timeout</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span></div>
+        <span class="k">return</span> <span class="n">l_rc</span>
+
+<div class="viewcode-block" id="OpTestSystem.sys_sel_check"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_sel_check">[docs]</a>    <span class="k">def</span> <span class="nf">sys_sel_check</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">i_string</span><span class="o">=</span><span class="s2">&quot;Transition to Non-recoverable&quot;</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">        Check for error during IPL that would result in test case failure</span>
+
+<span class="sd">        :param i_string: string to search for</span>
+<span class="sd">        :rtype: BMC_CONST.FW_SUCCESS or BMC_CONST.FW_FAILED</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">rc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_sel_check</span><span class="p">(</span><span class="n">i_string</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span></div>
+        <span class="k">return</span> <span class="n">rc</span>
+
+
+<div class="viewcode-block" id="OpTestSystem.sys_bmc_reboot"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_bmc_reboot">[docs]</a>    <span class="k">def</span> <span class="nf">sys_bmc_reboot</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">        Reboot the BMC</span>
+
+<span class="sd">        This may use ``ipmitool mc reset cold`` or it may do an inline ``reboot``</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">rc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_BMC</span><span class="o">.</span><span class="n">reboot</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+</div>
+        <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Validates the partition and waits for partition to connect</span>
+    <span class="c1">#        important to perform before all inband communications</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or BMC_CONST.FW_FAILED</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_bmc_power_on_validate_host"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_bmc_power_on_validate_host">[docs]</a>    <span class="k">def</span> <span class="nf">sys_bmc_power_on_validate_host</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># Check to see if host credentials are present</span>
+        <span class="k">if</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cv_HOST</span><span class="o">.</span><span class="n">ip</span> <span class="o">==</span> <span class="kc">None</span><span class="p">):</span>
+            <span class="n">l_msg</span> <span class="o">=</span> <span class="s2">&quot;Partition credentials not provided&quot;</span>
+            <span class="nb">print</span> <span class="n">l_msg</span>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+
+        <span class="c1"># Check if partition is active</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">PingFunc</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cv_HOST</span><span class="o">.</span><span class="n">ip</span><span class="p">,</span> <span class="n">totalSleepTime</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_HOST</span><span class="o">.</span><span class="n">host_get_OS_Level</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Trying to recover partition after error: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">e</span><span class="p">)</span> <span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_power_off</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">sys_cold_reset_bmc</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_power_on</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">sys_check_host_status</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">PingFunc</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cv_HOST</span><span class="o">.</span><span class="n">ip</span><span class="p">,</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">PING_RETRY_POWERCYCLE</span><span class="p">)</span>
+            <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+</div>
+        <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span>
+
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief This function reboots the system(Power off/on) and</span>
+    <span class="c1">#        check for system status and wait for</span>
+    <span class="c1">#        FW and Host OS Boot progress to complete.</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_hard_reboot"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_hard_reboot">[docs]</a>    <span class="k">def</span> <span class="nf">sys_hard_reboot</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="nb">print</span> <span class="s2">&quot;Performing a IPMI Power OFF Operation&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_power_off</span><span class="p">()</span>
+        <span class="n">rc</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sys_wait_for_standby_state</span><span class="p">(</span><span class="n">BMC_CONST</span><span class="o">.</span><span class="n">SYSTEM_STANDBY_STATE_DELAY</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">rc</span> <span class="o">==</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span><span class="p">:</span>
+            <span class="nb">print</span> <span class="s2">&quot;System is in standby/Soft-off state&quot;</span>
+        <span class="k">elif</span> <span class="n">rc</span> <span class="o">==</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_PARAMETER</span><span class="p">:</span>
+            <span class="nb">print</span> <span class="s2">&quot;Host Status sensor is not available&quot;</span>
+            <span class="nb">print</span> <span class="s2">&quot;Skipping stand-by state check&quot;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">l_msg</span> <span class="o">=</span> <span class="s2">&quot;System failed to reach standby/Soft-off state&quot;</span>
+            <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="n">l_msg</span><span class="p">)</span>
+        <span class="nb">print</span> <span class="s2">&quot;Performing a IPMI Power ON Operation&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_power_on</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sys_check_host_status</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">PingFunc</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cv_HOST</span><span class="o">.</span><span class="n">ip</span><span class="p">,</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">PING_RETRY_POWERCYCLE</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief This function will check for system status and wait for</span>
+    <span class="c1">#        FW and Host OS Boot progress to complete.</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_check_host_status"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_check_host_status">[docs]</a>    <span class="k">def</span> <span class="nf">sys_check_host_status</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">rc</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sys_ipl_wait_for_working_state</span><span class="p">())</span>
+        <span class="k">if</span> <span class="n">rc</span> <span class="o">==</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span><span class="p">:</span>
+            <span class="nb">print</span> <span class="s2">&quot;System booted to working state&quot;</span>
+        <span class="k">elif</span> <span class="n">rc</span> <span class="o">==</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_PARAMETER</span><span class="p">:</span>
+            <span class="nb">print</span> <span class="s2">&quot;Host Status sensor is not available&quot;</span>
+            <span class="nb">print</span> <span class="s2">&quot;Skip wait for IPL runtime check&quot;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">l_msg</span> <span class="o">=</span> <span class="s2">&quot;System failed to boot&quot;</span>
+            <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="n">l_msg</span><span class="p">)</span>
+        <span class="n">rc</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sys_wait_for_os_boot_complete</span><span class="p">())</span>
+        <span class="k">if</span> <span class="n">rc</span> <span class="o">==</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span><span class="p">:</span>
+            <span class="nb">print</span> <span class="s2">&quot;System booted to Host OS&quot;</span>
+        <span class="k">elif</span> <span class="n">rc</span> <span class="o">==</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_PARAMETER</span><span class="p">:</span>
+            <span class="nb">print</span> <span class="s2">&quot;OS Boot sensor is not available&quot;</span>
+            <span class="nb">print</span> <span class="s2">&quot;Skip wait for wait for OS boot complete check&quot;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">l_msg</span> <span class="o">=</span> <span class="s2">&quot;System failed to boot Host OS&quot;</span>
+            <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="n">l_msg</span><span class="p">)</span>
+</div>
+        <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief This function will check for system status and wait for</span>
+    <span class="c1">#        FW and Host OS Boot progress to complete.</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_check_host_status_v1"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_check_host_status_v1">[docs]</a>    <span class="k">def</span> <span class="nf">sys_check_host_status_v1</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_ipl_wait_for_working_state_v1</span><span class="p">())</span> <span class="o">==</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span><span class="p">:</span>
+            <span class="nb">print</span> <span class="s2">&quot;System booted to working state&quot;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="nb">print</span> <span class="s2">&quot;There is no Host Status sensor....&quot;</span>
+        <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_wait_for_os_boot_complete_v1</span><span class="p">())</span> <span class="o">==</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span><span class="p">:</span>
+            <span class="nb">print</span> <span class="s2">&quot;System booted to Host OS&quot;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="nb">print</span> <span class="s2">&quot;There is no OS Boot sensor...&quot;</span>
+</div>
+        <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span>
+
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Issue IPMI PNOR Reprovision request command</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or BMC_CONST.FW_FAILED</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_issue_ipmi_pnor_reprovision_request"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_issue_ipmi_pnor_reprovision_request">[docs]</a>    <span class="k">def</span> <span class="nf">sys_issue_ipmi_pnor_reprovision_request</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_HOST</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="n">BMC_CONST</span><span class="o">.</span><span class="n">HOST_IPMI_REPROVISION_REQUEST</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="nb">print</span> <span class="s2">&quot;Failed to issue ipmi pnor reprovision request&quot;</span>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span></div>
+        <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Wait for IPMI PNOR Reprovision to complete(response to 00)</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or BMC_CONST.FW_FAILED</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_wait_for_ipmi_pnor_reprovision_to_complete"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_wait_for_ipmi_pnor_reprovision_to_complete">[docs]</a>    <span class="k">def</span> <span class="nf">sys_wait_for_ipmi_pnor_reprovision_to_complete</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">):</span>
+        <span class="n">l_res</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+        <span class="n">timeout</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">+</span> <span class="mi">60</span><span class="o">*</span><span class="n">timeout</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="n">l_res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_HOST</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="n">BMC_CONST</span><span class="o">.</span><span class="n">HOST_IPMI_REPROVISION_PROGRESS</span><span class="p">)</span>
+            <span class="k">if</span> <span class="s2">&quot;00&quot;</span> <span class="ow">in</span> <span class="n">l_res</span><span class="p">:</span>
+                <span class="nb">print</span> <span class="s2">&quot;IPMI: Reprovision completed&quot;</span>
+                <span class="k">break</span>
+            <span class="k">if</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">&gt;</span> <span class="n">timeout</span><span class="p">:</span>
+                <span class="n">l_msg</span> <span class="o">=</span> <span class="s2">&quot;Reprovision timeout, progress not reaching to 00&quot;</span>
+                <span class="nb">print</span> <span class="n">l_msg</span>
+                <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="n">l_msg</span><span class="p">)</span>
+            <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span>
+
+
+
+    <span class="c1">###########################################################################</span>
+    <span class="c1"># CODE-UPDATE INTERFACES</span>
+    <span class="c1">###########################################################################</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Update the BMC fw image using hpm file</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_image HPM file image including location</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or BMC_CONST.FW_FAILED</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_bmc_outofband_fw_update_hpm"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_bmc_outofband_fw_update_hpm">[docs]</a>    <span class="k">def</span> <span class="nf">sys_bmc_outofband_fw_update_hpm</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">i_image</span><span class="p">):</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_power_off</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_preserve_network_setting</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_code_update</span><span class="p">(</span><span class="n">i_image</span><span class="p">,</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">BMC_FW_IMAGE_UPDATE</span><span class="p">)</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">sys_bmc_power_on_validate_host</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span></div>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Update the BMC pnor image using hpm file</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_image HPM file image including location</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or BMC_CONST.FW_FAILED</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_bmc_outofband_pnor_update_hpm"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_bmc_outofband_pnor_update_hpm">[docs]</a>    <span class="k">def</span> <span class="nf">sys_bmc_outofband_pnor_update_hpm</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">i_image</span><span class="p">):</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_power_off</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_preserve_network_setting</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_code_update</span><span class="p">(</span><span class="n">i_image</span><span class="p">,</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">BMC_PNOR_IMAGE_UPDATE</span><span class="p">)</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">sys_bmc_power_on_validate_host</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span></div>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Update the BMC fw and pnor image using hpm file</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_image HPM file image including location</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or BMC_CONST.FW_FAILED</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_bmc_outofband_fwandpnor_update_hpm"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_bmc_outofband_fwandpnor_update_hpm">[docs]</a>    <span class="k">def</span> <span class="nf">sys_bmc_outofband_fwandpnor_update_hpm</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">i_image</span><span class="p">):</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_power_off</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_preserve_network_setting</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_code_update</span><span class="p">(</span><span class="n">i_image</span><span class="p">,</span><span class="n">BMC_CONST</span><span class="o">.</span><span class="n">BMC_FWANDPNOR_IMAGE_UPDATE</span><span class="p">)</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">sys_bmc_power_on_validate_host</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span></div>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Update the BMC fw using hpm file using HOST</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_image HPM file image including location</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or BMC_CONST.FW_FAILED</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_bmc_inband_fw_update_hpm"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_bmc_inband_fw_update_hpm">[docs]</a>    <span class="k">def</span> <span class="nf">sys_bmc_inband_fw_update_hpm</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">i_image</span><span class="p">):</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1">#TODO: remove power_off() once DEFECT:SW325477 is fixed</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_power_off</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_cold_reset</span><span class="p">()</span>
+            <span class="n">l_rc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sys_bmc_power_on_validate_host</span><span class="p">()</span>
+            <span class="k">if</span><span class="p">(</span><span class="n">l_rc</span> <span class="o">!=</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_preserve_network_setting</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_HOST</span><span class="o">.</span><span class="n">host_code_update</span><span class="p">(</span><span class="n">i_image</span><span class="p">,</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">BMC_FW_IMAGE_UPDATE</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_cold_reset</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sys_cold_reset_bmc</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+</div>
+        <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span>
+
+
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Update the BMC pnor using hpm file using HOST</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_image HPM file image including location</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or BMC_CONST.FW_FAILED</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_bmc_inband_pnor_update_hpm"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_bmc_inband_pnor_update_hpm">[docs]</a>    <span class="k">def</span> <span class="nf">sys_bmc_inband_pnor_update_hpm</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">i_image</span><span class="p">):</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1">#TODO: remove power_off() once DEFECT:SW325477 is fixed</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_power_off</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_cold_reset</span><span class="p">()</span>
+            <span class="n">l_rc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sys_bmc_power_on_validate_host</span><span class="p">()</span>
+            <span class="k">if</span><span class="p">(</span><span class="n">l_rc</span> <span class="o">!=</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_preserve_network_setting</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_HOST</span><span class="o">.</span><span class="n">host_code_update</span><span class="p">(</span><span class="n">i_image</span><span class="p">,</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">BMC_PNOR_IMAGE_UPDATE</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_HOST</span><span class="o">.</span><span class="n">host_cold_reset</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sys_cold_reset_bmc</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+</div>
+        <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span>
+
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Update the BMC fw and pnor using hpm file using Host</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_image HPM file image including location</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or BMC_CONST.FW_FAILED</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_bmc_inband_fwandpnor_update_hpm"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_bmc_inband_fwandpnor_update_hpm">[docs]</a>    <span class="k">def</span> <span class="nf">sys_bmc_inband_fwandpnor_update_hpm</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">i_image</span><span class="p">):</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1">#TODO: remove power_off() once DEFECT:SW325477 is fixed</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_power_off</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_cold_reset</span><span class="p">()</span>
+            <span class="n">l_rc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sys_bmc_power_on_validate_host</span><span class="p">()</span>
+            <span class="k">if</span><span class="p">(</span><span class="n">l_rc</span> <span class="o">!=</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_preserve_network_setting</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_HOST</span><span class="o">.</span><span class="n">host_code_update</span><span class="p">(</span><span class="n">i_image</span><span class="p">,</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">BMC_FWANDPNOR_IMAGE_UPDATE</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_HOST</span><span class="o">.</span><span class="n">host_cold_reset</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sys_cold_reset_bmc</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+</div>
+        <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span>
+
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Update the PNOR image using hpm file through web GUI</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_image HPM file image including location</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or BMC_CONST.FW_FAILED or BMC_CONST.FW_INVALID</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_bmc_web_pnor_update_hpm"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_bmc_web_pnor_update_hpm">[docs]</a>    <span class="k">def</span> <span class="nf">sys_bmc_web_pnor_update_hpm</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">i_image</span><span class="p">):</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_power_off</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">bmc</span><span class="o">.</span><span class="n">cv_WEB</span><span class="o">.</span><span class="n">web_update_hpm</span><span class="p">(</span><span class="n">i_image</span><span class="p">,</span><span class="n">BMC_CONST</span><span class="o">.</span><span class="n">UPDATE_PNOR</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">if</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">ERROR_SELENIUM_HEADLESS</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_INVALID</span>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+</div>
+        <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span>
+
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Update the BMC image using hpm file through web GUI</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_image HPM file image including location</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or BMC_CONST.FW_FAILED or BMC_CONST.FW_INVALID</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_bmc_web_bmc_update_hpm"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_bmc_web_bmc_update_hpm">[docs]</a>    <span class="k">def</span> <span class="nf">sys_bmc_web_bmc_update_hpm</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">i_image</span><span class="p">):</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_power_off</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">bmc</span><span class="o">.</span><span class="n">cv_WEB</span><span class="o">.</span><span class="n">web_update_hpm</span><span class="p">(</span><span class="n">i_image</span><span class="p">,</span><span class="n">BMC_CONST</span><span class="o">.</span><span class="n">UPDATE_BMC</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">if</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">ERROR_SELENIUM_HEADLESS</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_INVALID</span>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+</div>
+        <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span>
+
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Update the BMC and PNOR image using hpm file through web GUI</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_image HPM file image including location</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or BMC_CONST.FW_FAILED or BMC_CONST.FW_INVALID</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_bmc_web_bmcandpnor_update_hpm"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_bmc_web_bmcandpnor_update_hpm">[docs]</a>    <span class="k">def</span> <span class="nf">sys_bmc_web_bmcandpnor_update_hpm</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">i_image</span><span class="p">):</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_power_off</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">bmc</span><span class="o">.</span><span class="n">cv_WEB</span><span class="o">.</span><span class="n">web_update_hpm</span><span class="p">(</span><span class="n">i_image</span><span class="p">,</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">UPDATE_BMCANDPNOR</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">if</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">ERROR_SELENIUM_HEADLESS</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_INVALID</span>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+</div>
+        <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span>
+
+    <span class="c1">###########################################################################</span>
+    <span class="c1"># Energy Scale</span>
+    <span class="c1">###########################################################################</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Sets power limit of BMC</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_powerlimit @type int: power limit to be set at BMC</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or BMC_CONST.FW_FAILED</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_set_power_limit"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_set_power_limit">[docs]</a>    <span class="k">def</span> <span class="nf">sys_set_power_limit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_powerlimit</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_power_status</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_set_power_limit</span><span class="p">(</span><span class="n">i_powerlimit</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span></div>
+        <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Gets the Power Limit</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return l_powerlimit @type int: current power limit on bmc</span>
+    <span class="c1">#         or BMC_CONST.FW_FAILED</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_get_power_limit"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_get_power_limit">[docs]</a>    <span class="k">def</span> <span class="nf">sys_get_power_limit</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_get_power_limit</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span></div>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Activates the power limit of the target bmc</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or BMC_CONST.FW_FAILED</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_activate_power_limit"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_activate_power_limit">[docs]</a>    <span class="k">def</span> <span class="nf">sys_activate_power_limit</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_activate_power_limit</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span></div>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Dectivates the power limit of the target bmc</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or BMC_CONST.FW_FAILED</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_deactivate_power_limit"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_deactivate_power_limit">[docs]</a>    <span class="k">def</span> <span class="nf">sys_deactivate_power_limit</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_deactivate_power_limit</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span></div>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Enable OCC Sensor</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or BMC_CONST.FW_FAILED</span>
+<div class="viewcode-block" id="OpTestSystem.sys_enable_all_occ_sensor"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_enable_all_occ_sensor">[docs]</a>    <span class="k">def</span> <span class="nf">sys_enable_all_occ_sensor</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_enable_all_occ_sensor</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span></div>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Disable OCC Sensor</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or BMC_CONST.FW_FAILED</span>
+<div class="viewcode-block" id="OpTestSystem.sys_disable_all_occ_sensor"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_disable_all_occ_sensor">[docs]</a>    <span class="k">def</span> <span class="nf">sys_disable_all_occ_sensor</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_disenable_all_occ_sensor</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span></div>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Read Bmc CPU sensors</span>
+    <span class="c1"># example (CPU Core Func 1|0x0|discrete|0x8080|na|na|na|na|na|na)</span>
+    <span class="c1">#         (CPU Core Temp 1|42.000|degrees C|ok|0.000|0.000|0.000|255.000|255.000|255.000)</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return CPU sensor reading if successful or</span>
+    <span class="c1">#         return BMC_CONST.FW_FAILED</span>
+<div class="viewcode-block" id="OpTestSystem.read_cpu_occ_sensor"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.read_cpu_occ_sensor">[docs]</a>    <span class="k">def</span> <span class="nf">read_cpu_occ_sensor</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">_ipmitool_cmd_run</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">cv_baseIpmiCmd</span> <span class="o">+</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">OP_CHECK_CPU</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span></div>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Read Bmc Processor sensors</span>
+    <span class="c1"># example (Mem Proc0 Pwr|0.000|Watts|ok|0.000|0.000|0.000|255.000|255.000|255.000)</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return Processor sensor reading if successful or</span>
+    <span class="c1">#         return BMC_CONST.FW_FAILED</span>
+<div class="viewcode-block" id="OpTestSystem.read_processor_occ_sensor"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.read_processor_occ_sensor">[docs]</a>    <span class="k">def</span> <span class="nf">read_processor_occ_sensor</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">_ipmitool_cmd_run</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">cv_baseIpmiCmd</span> <span class="o">+</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">OP_CHECK_PROCESSOR</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span></div>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Read Bmc Fan sensors</span>
+    <span class="c1"># example(Fan 1 |9000.000|RPM|ok|0.000|0.000|0.000|16500.000|16500.000|16500.000)</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return Fan sensor reading if successful or</span>
+    <span class="c1">#         return BMC_CONST.FW_FAILED</span>
+<div class="viewcode-block" id="OpTestSystem.read_fan_occ_sensor"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.read_fan_occ_sensor">[docs]</a>    <span class="k">def</span> <span class="nf">read_fan_occ_sensor</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">_ipmitool_cmd_run</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">cv_baseIpmiCmd</span> <span class="o">+</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">OP_CHECK_FAN</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span></div>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Read Bmc DIMM sensors</span>
+    <span class="c1"># example(DIMM Func 0|0x0|discrete|0x4080|na|na|na|na|na|na)</span>
+    <span class="c1">#        (DIMM Temp 0|27.000|degrees C|ok|0.000|0.000|0.000|255.000|255.000|255.000)</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return Fan sensor reading if successful or</span>
+    <span class="c1">#         return BMC_CONST.FW_FAILED</span>
+<div class="viewcode-block" id="OpTestSystem.read_dimm_occ_sensor"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.read_dimm_occ_sensor">[docs]</a>    <span class="k">def</span> <span class="nf">read_dimm_occ_sensor</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">_ipmitool_cmd_run</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">cv_baseIpmiCmd</span> <span class="o">+</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">OP_CHECK_DIMM</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span></div>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Read All BMC sensors</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC sensor readings if successful or</span>
+    <span class="c1">#         return BMC_CONST.FW_FAILED</span>
+<div class="viewcode-block" id="OpTestSystem.read_sensor_list"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.read_sensor_list">[docs]</a>    <span class="k">def</span> <span class="nf">read_sensor_list</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">_ipmitool_cmd_run</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">cv_baseIpmiCmd</span> <span class="o">+</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">OP_CHECK_SENSOR_LIST</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span></div>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Read Bmc power levels</span>
+    <span class="c1"># example (Instantaneous power reading:                   297 Watts</span>
+    <span class="c1">#          Minimum during sampling period:                284 Watts</span>
+    <span class="c1">#          Maximum during sampling period:                317 Watts</span>
+    <span class="c1">#          Average power reading over sample period:      297 Watts</span>
+    <span class="c1">#          IPMI timestamp:                           Tue Nov 24 09:46:03 2015</span>
+    <span class="c1">#          Sampling period:                          00010000 Milliseconds</span>
+    <span class="c1">#          Power reading state is:                   activated)</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return Power reading if successful or</span>
+    <span class="c1">#         return BMC_CONST.FW_FAILED</span>
+<div class="viewcode-block" id="OpTestSystem.read_power_level"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.read_power_level">[docs]</a>    <span class="k">def</span> <span class="nf">read_power_level</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">_ipmitool_cmd_run</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">cv_baseIpmiCmd</span> <span class="o">+</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">OP_GET_POWER</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span></div>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Read Bmc temperature levels of CPU and baseboard</span>
+    <span class="c1"># example (Entity ID Entity Instance              Temp. Readings</span>
+    <span class="c1">#         (CPU temperature sensors(41h)             0       +28 C)</span>
+    <span class="c1">#         (Baseboard temperature sensors(42h)       0       +22 C)</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return Operating temperature readings if successful or</span>
+    <span class="c1">#         return BMC_CONST.FW_FAILED</span>
+<div class="viewcode-block" id="OpTestSystem.read_temperature_level"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.read_temperature_level">[docs]</a>    <span class="k">def</span> <span class="nf">read_temperature_level</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">_ipmitool_cmd_run</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">cv_baseIpmiCmd</span> <span class="o">+</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">OP_GET_TEMP</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span></div>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Read OCC status</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return OCC status if successful or</span>
+    <span class="c1">#         return BMC_CONST.FW_FAILED</span>
+<div class="viewcode-block" id="OpTestSystem.read_occ_status"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.read_occ_status">[docs]</a>    <span class="k">def</span> <span class="nf">read_occ_status</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_get_occ_status</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span></div>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief clears the gard records using the gard tool from OS</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_gard_dir @type string: directory where gard is installed</span>
+    <span class="c1">#</span>
+    <span class="c1"># return BMC.CONST.FW_SUCCESS or BMC_CONST.FW_FAILED</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_clear_gard_records"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_clear_gard_records">[docs]</a>    <span class="k">def</span> <span class="nf">sys_clear_gard_records</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_gard_dir</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sys_bmc_power_on_validate_host</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_HOST</span><span class="o">.</span><span class="n">host_clear_gard_records</span><span class="p">(</span><span class="n">i_gard_dir</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span></div>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Lists all the gard records using the gard tool from OS</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_gard_dir @type string: directory where gard is installed</span>
+    <span class="c1">#</span>
+    <span class="c1"># return gard records or BMC_CONST.FW_FAILED</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_list_gard_records"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_list_gard_records">[docs]</a>    <span class="k">def</span> <span class="nf">sys_list_gard_records</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_gard_dir</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sys_bmc_power_on_validate_host</span><span class="p">()</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_HOST</span><span class="o">.</span><span class="n">host_list_gard_records</span><span class="p">(</span><span class="n">i_gard_dir</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span></div>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief reads getscom data</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_xscom_dir @type string: directory where getscom is installed</span>
+    <span class="c1">#</span>
+    <span class="c1"># return getscom data or BMC_CONST.FW_FAILED</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_read_getscom_data"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_read_getscom_data">[docs]</a>    <span class="k">def</span> <span class="nf">sys_read_getscom_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_xscom_dir</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sys_bmc_power_on_validate_host</span><span class="p">()</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_HOST</span><span class="o">.</span><span class="n">host_read_getscom_data</span><span class="p">(</span><span class="n">i_xscom_dir</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span></div>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief injects error using putscom</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_xscom_dir @type string: directory where putscom is installed</span>
+    <span class="c1"># @param i_error @type string: error to be injected including the location</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return output generated after executing putscom command or BMC_CONST.FW_FAILED</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_putscom"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_putscom">[docs]</a>    <span class="k">def</span> <span class="nf">sys_putscom</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_xscom_dir</span><span class="p">,</span> <span class="n">i_error</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sys_bmc_power_on_validate_host</span><span class="p">()</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_HOST</span><span class="o">.</span><span class="n">host_putscom</span><span class="p">(</span><span class="n">i_xscom_dir</span><span class="p">,</span> <span class="n">i_error</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span></div>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief This function gets the sel log</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return sel list or BMC_CONST.FW_FAILED</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_get_sel_list"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_get_sel_list">[docs]</a>    <span class="k">def</span> <span class="nf">sys_get_sel_list</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_get_sel_list</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span></div>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief This function gets the sdr list</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return @type string: sdr list or BMC_CONST.FW_FAILED</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_get_sdr_list"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_get_sdr_list">[docs]</a>    <span class="k">def</span> <span class="nf">sys_get_sdr_list</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_get_sdr_list</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span></div>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Set BMC to boot pnor from primary side</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_bios_sensor @type string: Id for BIOS Golden Sensor (example habanero=0x5c)</span>
+    <span class="c1"># @param i_boot_sensor @type string: Id for BOOT Count Sensor (example habanero=80)</span>
+    <span class="c1">#</span>
+    <span class="c1"># return BMC_CONST.FW_SUCCESS or BMC_CONST.FW_FAILED</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_set_pnor_boot_primary"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_set_pnor_boot_primary">[docs]</a>    <span class="k">def</span> <span class="nf">sys_set_pnor_boot_primary</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_bios_sensor</span><span class="p">,</span> <span class="n">i_boot_sensor</span><span class="p">):</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_set_pnor_primary_side</span><span class="p">(</span><span class="n">i_bios_sensor</span><span class="p">,</span><span class="n">i_boot_sensor</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span></div>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Set BMC to boot pnor from golden side</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_bios_sensor @type string: Id for BIOS Golden Sensor (example habanero=0x5c)</span>
+    <span class="c1"># @param i_boot_sensor @type string: Id for BOOT Count Sensor (example habanero=80)</span>
+    <span class="c1">#</span>
+    <span class="c1"># return BMC_CONST.FW_SUCCESS or BMC_CONST.FW_FAILED</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_set_pnor_boot_golden"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_set_pnor_boot_golden">[docs]</a>    <span class="k">def</span> <span class="nf">sys_set_pnor_boot_golden</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_bios_sensor</span><span class="p">,</span> <span class="n">i_boot_sensor</span><span class="p">):</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_set_pnor_golden_side</span><span class="p">(</span><span class="n">i_bios_sensor</span><span class="p">,</span><span class="n">i_boot_sensor</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span></div>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Determines which side of BMC and PNOR chip is active</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return l_bmc_active and l_pnor_active @type string or return FWConstants.FW_FAILED</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_active_chip_side"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_active_chip_side">[docs]</a>    <span class="k">def</span> <span class="nf">sys_active_chip_side</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">l_bmc_active</span><span class="p">,</span> <span class="n">l_pnor_active</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_get_side_activated</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">l_bmc_active</span><span class="p">,</span> <span class="n">l_pnor_active</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span></div>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span><span class="p">,</span><span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span>
+
+
+
+    <span class="c1">###########################################################################</span>
+    <span class="c1"># IPMI Console interfaces</span>
+    <span class="c1">###########################################################################</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief It will get the ipmi sol console</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return l_con @type Object: it is a object of pexpect.spawn class or raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_get_ipmi_console"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_get_ipmi_console">[docs]</a>    <span class="k">def</span> <span class="nf">sys_get_ipmi_console</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">l_con</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bmc</span><span class="o">.</span><span class="n">get_host_console</span><span class="p">()</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">l_con</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief This function is used to close ipmi console</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_con @type Object: it is a object of pexpect.spawn class</span>
+    <span class="c1">#                            this is the active ipmi sol console object</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or return BMC_CONST.FW_FAILED</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_ipmi_close_console"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_ipmi_close_console">[docs]</a>    <span class="k">def</span> <span class="nf">sys_ipmi_close_console</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_con</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">l_con</span> <span class="o">=</span> <span class="n">i_con</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_close_console</span><span class="p">(</span><span class="n">l_con</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_FAILED</span></div>
+        <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief This function is used to boot the system up to petitboot</span>
+    <span class="c1">#        So any petitboot related test cases can use this function</span>
+    <span class="c1">#        to setupt the petitboot</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_con @type Object: it is a object of pexpect.spawn class</span>
+    <span class="c1">#                            this is the active ipmi sol console object</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or return BMC_CONST.FW_FAILED</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestSystem.sys_ipmi_boot_system_to_petitboot"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.sys_ipmi_boot_system_to_petitboot">[docs]</a>    <span class="k">def</span> <span class="nf">sys_ipmi_boot_system_to_petitboot</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># Perform a IPMI Power OFF Operation(Immediate Shutdown)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_power_off</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sys_wait_for_standby_state</span><span class="p">(</span><span class="n">BMC_CONST</span><span class="o">.</span><span class="n">SYSTEM_STANDBY_STATE_DELAY</span><span class="p">))</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="nb">print</span> <span class="s2">&quot;System is in standby/Soft-off state&quot;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">l_msg</span> <span class="o">=</span> <span class="s2">&quot;System failed to reach standby/Soft-off state&quot;</span>
+            <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="n">l_msg</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_set_boot_to_petitboot</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cv_IPMI</span><span class="o">.</span><span class="n">ipmi_power_on</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">wait_for_petitboot</span><span class="p">()</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">petitboot_exit_to_shell</span><span class="p">()</span>
+
+<div class="viewcode-block" id="OpTestSystem.wait_for_petitboot"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.wait_for_petitboot">[docs]</a>    <span class="k">def</span> <span class="nf">wait_for_petitboot</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">console</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">console</span><span class="o">.</span><span class="n">get_console</span><span class="p">()</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># Wait for petitboot (for a *LOOONNNG* time due to verbose IPLs)</span>
+            <span class="n">seen</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="n">r</span> <span class="o">=</span> <span class="mi">1</span>
+            <span class="n">t</span> <span class="o">=</span> <span class="mi">100</span>
+            <span class="k">while</span> <span class="n">seen</span> <span class="o">&lt;</span> <span class="mi">2</span> <span class="ow">and</span> <span class="n">t</span><span class="p">:</span>
+                <span class="c1"># TODO check for forward progress</span>
+                <span class="n">r</span> <span class="o">=</span> <span class="n">console</span><span class="o">.</span><span class="n">expect</span><span class="p">([</span><span class="s1">&#39;x=exit&#39;</span><span class="p">,</span> <span class="s1">&#39;Petitboot&#39;</span><span class="p">,</span> <span class="n">pexpect</span><span class="o">.</span><span class="n">TIMEOUT</span><span class="p">],</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">r</span> <span class="o">==</span> <span class="mi">2</span> <span class="ow">and</span> <span class="n">t</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="n">pexpect</span><span class="o">.</span><span class="n">TIMEOUT</span>
+                <span class="k">if</span> <span class="n">r</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">]:</span>
+                    <span class="n">seen</span> <span class="o">=</span> <span class="n">seen</span> <span class="o">+</span> <span class="mi">1</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">t</span> <span class="o">=</span> <span class="n">t</span> <span class="o">-</span> <span class="mi">1</span>
+
+            <span class="c1"># there will be extra things in the pexpect buffer here</span>
+        <span class="k">except</span> <span class="n">pexpect</span><span class="o">.</span><span class="n">TIMEOUT</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="nb">print</span> <span class="s2">&quot;Timeout waiting for Petitboot!&quot;</span>
+            <span class="nb">print</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span></div>
+            <span class="k">raise</span> <span class="n">e</span>
+
+<div class="viewcode-block" id="OpTestSystem.wait_for_kexec"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.wait_for_kexec">[docs]</a>    <span class="k">def</span> <span class="nf">wait_for_kexec</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">console</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">console</span><span class="o">.</span><span class="n">get_console</span><span class="p">()</span>
+        <span class="c1"># Wait for kexec to start</span></div>
+        <span class="n">console</span><span class="o">.</span><span class="n">expect</span><span class="p">([</span><span class="s1">&#39;Performing kexec&#39;</span><span class="p">,</span><span class="s1">&#39;kexec_core: Starting new kernel&#39;</span><span class="p">],</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">)</span>
+
+<div class="viewcode-block" id="OpTestSystem.petitboot_exit_to_shell"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.petitboot_exit_to_shell">[docs]</a>    <span class="k">def</span> <span class="nf">petitboot_exit_to_shell</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">console</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">console</span><span class="o">.</span><span class="n">get_console</span><span class="p">()</span>
+        <span class="c1"># Exiting to petitboot shell</span>
+        <span class="n">console</span><span class="o">.</span><span class="n">sendcontrol</span><span class="p">(</span><span class="s1">&#39;l&#39;</span><span class="p">)</span>
+        <span class="n">console</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="s1">&#39;x&#39;</span><span class="p">)</span>
+        <span class="n">console</span><span class="o">.</span><span class="n">expect</span><span class="p">(</span><span class="s1">&#39;Exiting petitboot&#39;</span><span class="p">)</span>
+        <span class="n">console</span><span class="o">.</span><span class="n">expect</span><span class="p">(</span><span class="s1">&#39;#&#39;</span><span class="p">)</span>
+        <span class="c1"># we should have consumed everything in the buffer now.</span></div>
+        <span class="nb">print</span> <span class="n">console</span>
+
+<div class="viewcode-block" id="OpTestSystem.exit_petitboot_shell"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.exit_petitboot_shell">[docs]</a>    <span class="k">def</span> <span class="nf">exit_petitboot_shell</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">console</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">console</span><span class="o">.</span><span class="n">get_console</span><span class="p">()</span>
+        <span class="n">console</span><span class="o">.</span><span class="n">sendcontrol</span><span class="p">(</span><span class="s1">&#39;l&#39;</span><span class="p">)</span>
+        <span class="n">console</span><span class="o">.</span><span class="n">sendline</span><span class="p">(</span><span class="s1">&#39;exit&#39;</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">wait_for_petitboot</span><span class="p">()</span>
+
+<div class="viewcode-block" id="OpTestSystem.wait_for_login"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.wait_for_login">[docs]</a>    <span class="k">def</span> <span class="nf">wait_for_login</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">600</span><span class="p">):</span>
+        <span class="n">console</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">console</span><span class="o">.</span><span class="n">get_console</span><span class="p">()</span>
+        <span class="n">console</span><span class="o">.</span><span class="n">sendline</span><span class="p">(</span><span class="s1">&#39;&#39;</span><span class="p">)</span></div>
+        <span class="n">console</span><span class="o">.</span><span class="n">expect</span><span class="p">(</span><span class="s1">&#39;login: &#39;</span><span class="p">,</span> <span class="n">timeout</span><span class="p">)</span>
+
+<div class="viewcode-block" id="OpTestSystem.get_my_ip_from_host_perspective"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestSystem.get_my_ip_from_host_perspective">[docs]</a>    <span class="k">def</span> <span class="nf">get_my_ip_from_host_perspective</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">rawc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">console</span><span class="o">.</span><span class="n">get_console</span><span class="p">()</span>
+        <span class="n">port</span> <span class="o">=</span> <span class="mi">12340</span>
+        <span class="n">my_ip</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state</span><span class="p">()</span> <span class="o">==</span> <span class="n">OpSystemState</span><span class="o">.</span><span class="n">PETITBOOT_SHELL</span><span class="p">:</span>
+                <span class="n">rawc</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="s2">&quot;nc -l -p </span><span class="si">%u</span><span class="s2"> -v -e /bin/true</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">port</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">rawc</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="s2">&quot;nc -l -p </span><span class="si">%u</span><span class="s2"> -v</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">port</span><span class="p">)</span>
+            <span class="n">sock</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">AF_INET</span><span class="p">,</span> <span class="n">socket</span><span class="o">.</span><span class="n">SOCK_STREAM</span><span class="p">)</span>
+            <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.5</span><span class="p">)</span>
+            <span class="nb">print</span> <span class="s2">&quot;# Connecting to </span><span class="si">%s</span><span class="s2">:</span><span class="si">%u</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="p">()</span><span class="o">.</span><span class="n">hostname</span><span class="p">(),</span> <span class="n">port</span><span class="p">)</span>
+            <span class="n">sock</span><span class="o">.</span><span class="n">connect</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="p">()</span><span class="o">.</span><span class="n">hostname</span><span class="p">(),</span> <span class="n">port</span><span class="p">))</span>
+            <span class="n">sock</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="s1">&#39;Hello World!&#39;</span><span class="p">)</span>
+            <span class="n">sock</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="n">rawc</span><span class="o">.</span><span class="n">expect</span><span class="p">(</span><span class="s1">&#39;Connection from &#39;</span><span class="p">)</span>
+            <span class="n">rawc</span><span class="o">.</span><span class="n">expect</span><span class="p">([</span><span class="s1">&#39;:&#39;</span><span class="p">,</span> <span class="s1">&#39; &#39;</span><span class="p">])</span>
+            <span class="n">my_ip</span> <span class="o">=</span> <span class="n">rawc</span><span class="o">.</span><span class="n">before</span>
+            <span class="n">rawc</span><span class="o">.</span><span class="n">expect</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
+            <span class="nb">print</span> <span class="nb">repr</span><span class="p">(</span><span class="n">my_ip</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">my_ip</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>  <span class="c1"># Looks like older nc does not support -v, lets fallback</span>
+            <span class="n">rawc</span><span class="o">.</span><span class="n">sendcontrol</span><span class="p">(</span><span class="s1">&#39;c&#39;</span><span class="p">)</span>  <span class="c1"># to avoid incase nc command hangs</span>
+            <span class="n">my_ip</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="n">ip</span> <span class="o">=</span> <span class="n">commands</span><span class="o">.</span><span class="n">getoutput</span><span class="p">(</span><span class="s2">&quot;hostname -i&quot;</span><span class="p">)</span>
+            <span class="n">ip_lst</span> <span class="o">=</span> <span class="n">commands</span><span class="o">.</span><span class="n">getoutput</span><span class="p">(</span><span class="s2">&quot;hostname -I&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot; &quot;</span><span class="p">)</span>
+            <span class="c1"># Let&#39;s validate the IP</span>
+            <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">ip_lst</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">item</span> <span class="o">==</span> <span class="n">ip</span><span class="p">:</span>
+                    <span class="n">my_ip</span> <span class="o">=</span> <span class="n">ip</span>
+                    <span class="k">break</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">my_ip</span><span class="p">:</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">ip_lst</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="n">my_ip</span> <span class="o">=</span> <span class="n">ip_lst</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="nb">print</span> <span class="s2">&quot;hostname -i does not provide valid IP, correct and proceed with installation&quot;</span></div></div>
+        <span class="k">return</span> <span class="n">my_ip</span>
+
+<div class="viewcode-block" id="OpTestFSPSystem"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestFSPSystem">[docs]</a><span class="k">class</span> <span class="nc">OpTestFSPSystem</span><span class="p">(</span><span class="n">OpTestSystem</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">    Implementation of an OpTestSystem for IBM FSP based systems (such as Tuleta and ZZ)</span>
+
+<span class="sd">    Main differences are that some functions need to be done via the service processor</span>
+<span class="sd">    rather than via IPMI due to differences in functionality.</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>
+                 <span class="n">host</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                 <span class="n">bmc</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                 <span class="n">state</span><span class="o">=</span><span class="n">OpSystemState</span><span class="o">.</span><span class="n">UNKNOWN</span><span class="p">):</span>
+        <span class="n">bmc</span><span class="o">.</span><span class="n">fsp_get_console</span><span class="p">()</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">OpTestFSPSystem</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="n">host</span><span class="p">,</span>
+                                              <span class="n">bmc</span><span class="o">=</span><span class="n">bmc</span><span class="p">,</span>
+                                              <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">)</span>
+
+<div class="viewcode-block" id="OpTestFSPSystem.sys_wait_for_standby_state"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestFSPSystem.sys_wait_for_standby_state">[docs]</a>    <span class="k">def</span> <span class="nf">sys_wait_for_standby_state</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_timeout</span><span class="o">=</span><span class="mi">120</span><span class="p">):</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_BMC</span><span class="o">.</span><span class="n">wait_for_standby</span><span class="p">(</span><span class="n">i_timeout</span><span class="p">)</span>
+
+<div class="viewcode-block" id="OpTestFSPSystem.wait_for_petitboot"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestFSPSystem.wait_for_petitboot">[docs]</a>    <span class="k">def</span> <span class="nf">wait_for_petitboot</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># Ensure IPMI console is open so not to miss petitboot</span>
+        <span class="n">console</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">console</span><span class="o">.</span><span class="n">get_console</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cv_BMC</span><span class="o">.</span><span class="n">wait_for_runtime</span><span class="p">()</span></div>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">(</span><span class="n">OpTestFSPSystem</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">wait_for_petitboot</span><span class="p">()</span>
+
+<div class="viewcode-block" id="OpTestFSPSystem.skiboot_log_on_console"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestFSPSystem.skiboot_log_on_console">[docs]</a>    <span class="k">def</span> <span class="nf">skiboot_log_on_console</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="k">return</span> <span class="kc">False</span>
+
+<div class="viewcode-block" id="OpTestFSPSystem.has_host_accessible_eeprom"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestFSPSystem.has_host_accessible_eeprom">[docs]</a>    <span class="k">def</span> <span class="nf">has_host_accessible_eeprom</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="k">return</span> <span class="kc">False</span>
+
+<div class="viewcode-block" id="OpTestFSPSystem.has_host_led_support"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestFSPSystem.has_host_led_support">[docs]</a>    <span class="k">def</span> <span class="nf">has_host_led_support</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="k">return</span> <span class="kc">True</span>
+
+<div class="viewcode-block" id="OpTestFSPSystem.has_centaurs_in_dt"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestFSPSystem.has_centaurs_in_dt">[docs]</a>    <span class="k">def</span> <span class="nf">has_centaurs_in_dt</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="k">return</span> <span class="kc">False</span>
+
+<div class="viewcode-block" id="OpTestFSPSystem.has_mtd_pnor_access"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestFSPSystem.has_mtd_pnor_access">[docs]</a>    <span class="k">def</span> <span class="nf">has_mtd_pnor_access</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div></div>
+        <span class="k">return</span> <span class="kc">False</span>
+
+<div class="viewcode-block" id="OpTestOpenBMCSystem"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestOpenBMCSystem">[docs]</a><span class="k">class</span> <span class="nc">OpTestOpenBMCSystem</span><span class="p">(</span><span class="n">OpTestSystem</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">    Implementation of an OpTestSystem for OpenBMC based platforms.</span>
+
+<span class="sd">    Near all IPMI functionality is done via the OpenBMC REST interface instead.</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>
+                 <span class="n">host</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                 <span class="n">bmc</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                 <span class="n">state</span><span class="o">=</span><span class="n">OpSystemState</span><span class="o">.</span><span class="n">UNKNOWN</span><span class="p">):</span>
+        <span class="c1"># Ensure we grab host console early, in order to not miss</span>
+        <span class="c1"># any messages</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">console</span> <span class="o">=</span> <span class="n">bmc</span><span class="o">.</span><span class="n">get_host_console</span><span class="p">()</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">OpTestOpenBMCSystem</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="n">host</span><span class="p">,</span>
+                                                  <span class="n">bmc</span><span class="o">=</span><span class="n">bmc</span><span class="p">,</span>
+                                                  <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">)</span>
+    <span class="c1"># REST Based management</span>
+<div class="viewcode-block" id="OpTestOpenBMCSystem.sys_inventory"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestOpenBMCSystem.sys_inventory">[docs]</a>    <span class="k">def</span> <span class="nf">sys_inventory</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rest</span><span class="o">.</span><span class="n">get_inventory</span><span class="p">()</span>
+
+<div class="viewcode-block" id="OpTestOpenBMCSystem.sys_sensors"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestOpenBMCSystem.sys_sensors">[docs]</a>    <span class="k">def</span> <span class="nf">sys_sensors</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rest</span><span class="o">.</span><span class="n">sensors</span><span class="p">()</span>
+
+<div class="viewcode-block" id="OpTestOpenBMCSystem.sys_bmc_state"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestOpenBMCSystem.sys_bmc_state">[docs]</a>    <span class="k">def</span> <span class="nf">sys_bmc_state</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rest</span><span class="o">.</span><span class="n">get_bmc_state</span><span class="p">()</span>
+
+<div class="viewcode-block" id="OpTestOpenBMCSystem.sys_power_on"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestOpenBMCSystem.sys_power_on">[docs]</a>    <span class="k">def</span> <span class="nf">sys_power_on</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rest</span><span class="o">.</span><span class="n">power_on</span><span class="p">()</span>
+
+<div class="viewcode-block" id="OpTestOpenBMCSystem.sys_power_off"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestOpenBMCSystem.sys_power_off">[docs]</a>    <span class="k">def</span> <span class="nf">sys_power_off</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rest</span><span class="o">.</span><span class="n">power_off</span><span class="p">()</span>
+
+<div class="viewcode-block" id="OpTestOpenBMCSystem.sys_power_reset"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestOpenBMCSystem.sys_power_reset">[docs]</a>    <span class="k">def</span> <span class="nf">sys_power_reset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rest</span><span class="o">.</span><span class="n">hard_reboot</span><span class="p">()</span>
+
+<div class="viewcode-block" id="OpTestOpenBMCSystem.sys_power_cycle"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestOpenBMCSystem.sys_power_cycle">[docs]</a>    <span class="k">def</span> <span class="nf">sys_power_cycle</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rest</span><span class="o">.</span><span class="n">soft_reboot</span><span class="p">()</span>
+
+<div class="viewcode-block" id="OpTestOpenBMCSystem.sys_power_soft"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestOpenBMCSystem.sys_power_soft">[docs]</a>    <span class="k">def</span> <span class="nf">sys_power_soft</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1">#self.rest.power_soft() currently rest command for softPowerOff failing</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rest</span><span class="o">.</span><span class="n">power_off</span><span class="p">()</span>
+
+<div class="viewcode-block" id="OpTestOpenBMCSystem.sys_sdr_clear"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestOpenBMCSystem.sys_sdr_clear">[docs]</a>    <span class="k">def</span> <span class="nf">sys_sdr_clear</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># We can delete individual SEL entry by id</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rest</span><span class="o">.</span><span class="n">clear_sel_by_id</span><span class="p">()</span>
+        <span class="c1"># Deleting complete SEL repository is not yet implemented</span>
+        <span class="c1">#self.rest.clear_sel()</span>
+
+<div class="viewcode-block" id="OpTestOpenBMCSystem.sys_get_sel_list"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestOpenBMCSystem.sys_get_sel_list">[docs]</a>    <span class="k">def</span> <span class="nf">sys_get_sel_list</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rest</span><span class="o">.</span><span class="n">list_sel</span><span class="p">()</span>
+
+<div class="viewcode-block" id="OpTestOpenBMCSystem.sys_sel_check"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestOpenBMCSystem.sys_sel_check">[docs]</a>    <span class="k">def</span> <span class="nf">sys_sel_check</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rest</span><span class="o">.</span><span class="n">list_sel</span><span class="p">()</span>
+
+<div class="viewcode-block" id="OpTestOpenBMCSystem.sys_wait_for_standby_state"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestOpenBMCSystem.sys_wait_for_standby_state">[docs]</a>    <span class="k">def</span> <span class="nf">sys_wait_for_standby_state</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_timeout</span><span class="o">=</span><span class="mi">120</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rest</span><span class="o">.</span><span class="n">wait_for_standby</span><span class="p">()</span></div>
+        <span class="k">return</span> <span class="mi">0</span>
+
+<div class="viewcode-block" id="OpTestOpenBMCSystem.wait_for_petitboot"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestOpenBMCSystem.wait_for_petitboot">[docs]</a>    <span class="k">def</span> <span class="nf">wait_for_petitboot</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># Ensure IPMI console is open so not to miss petitboot</span>
+        <span class="n">console</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">console</span><span class="o">.</span><span class="n">get_console</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rest</span><span class="o">.</span><span class="n">wait_for_runtime</span><span class="p">()</span></div>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">(</span><span class="n">OpTestOpenBMCSystem</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">wait_for_petitboot</span><span class="p">()</span>
+
+<div class="viewcode-block" id="OpTestOpenBMCSystem.sys_set_bootdev_setup"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestOpenBMCSystem.sys_set_bootdev_setup">[docs]</a>    <span class="k">def</span> <span class="nf">sys_set_bootdev_setup</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rest</span><span class="o">.</span><span class="n">set_bootdev_to_setup</span><span class="p">()</span>
+
+<div class="viewcode-block" id="OpTestOpenBMCSystem.sys_set_bootdev_no_override"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestOpenBMCSystem.sys_set_bootdev_no_override">[docs]</a>    <span class="k">def</span> <span class="nf">sys_set_bootdev_no_override</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rest</span><span class="o">.</span><span class="n">set_bootdev_to_none</span><span class="p">()</span>
+
+<div class="viewcode-block" id="OpTestOpenBMCSystem.sys_warm_reset"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestOpenBMCSystem.sys_warm_reset">[docs]</a>    <span class="k">def</span> <span class="nf">sys_warm_reset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rest</span><span class="o">.</span><span class="n">bmc_reset</span><span class="p">()</span>
+
+<div class="viewcode-block" id="OpTestOpenBMCSystem.sys_cold_reset_bmc"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestOpenBMCSystem.sys_cold_reset_bmc">[docs]</a>    <span class="k">def</span> <span class="nf">sys_cold_reset_bmc</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rest</span><span class="o">.</span><span class="n">bmc_reset</span><span class="p">()</span>
+
+<div class="viewcode-block" id="OpTestQemuSystem"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestQemuSystem">[docs]</a><span class="k">class</span> <span class="nc">OpTestQemuSystem</span><span class="p">(</span><span class="n">OpTestSystem</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">    Implementation of OpTestSystem for the Qemu Simulator</span>
+
+<span class="sd">    Running against a simulator is rather different than running against a machine,</span>
+<span class="sd">    but only in some *specific* cases. Many tests will run as-is, but ones that require</span>
+<span class="sd">    a bunch of manipulation of the BMC will likely not.</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>
+                 <span class="n">host</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                 <span class="n">bmc</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                 <span class="n">state</span><span class="o">=</span><span class="n">OpSystemState</span><span class="o">.</span><span class="n">UNKNOWN</span><span class="p">):</span>
+        <span class="c1"># Ensure we grab host console early, in order to not miss</span>
+        <span class="c1"># any messages</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">console</span> <span class="o">=</span> <span class="n">bmc</span><span class="o">.</span><span class="n">get_host_console</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">host</span><span class="o">.</span><span class="n">scratch_disk</span> <span class="ow">in</span> <span class="p">[</span><span class="kc">None</span><span class="p">,</span><span class="s1">&#39;&#39;</span><span class="p">]:</span>
+            <span class="n">host</span><span class="o">.</span><span class="n">scratch_disk</span> <span class="o">=</span> <span class="s2">&quot;/dev/sda&quot;</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">OpTestQemuSystem</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="n">host</span><span class="p">,</span>
+                                               <span class="n">bmc</span><span class="o">=</span><span class="n">bmc</span><span class="p">,</span>
+                                               <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">)</span>
+
+<div class="viewcode-block" id="OpTestQemuSystem.sys_wait_for_standby_state"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestQemuSystem.sys_wait_for_standby_state">[docs]</a>    <span class="k">def</span> <span class="nf">sys_wait_for_standby_state</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_timeout</span><span class="o">=</span><span class="mi">120</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bmc</span><span class="o">.</span><span class="n">power_off</span><span class="p">()</span></div>
+        <span class="k">return</span> <span class="mi">0</span>
+
+<div class="viewcode-block" id="OpTestQemuSystem.sys_sdr_clear"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestQemuSystem.sys_sdr_clear">[docs]</a>    <span class="k">def</span> <span class="nf">sys_sdr_clear</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="k">return</span> <span class="mi">0</span>
+
+<div class="viewcode-block" id="OpTestQemuSystem.sys_power_on"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestQemuSystem.sys_power_on">[docs]</a>    <span class="k">def</span> <span class="nf">sys_power_on</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bmc</span><span class="o">.</span><span class="n">power_on</span><span class="p">()</span>
+
+<div class="viewcode-block" id="OpTestQemuSystem.get_my_ip_from_host_perspective"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestQemuSystem.get_my_ip_from_host_perspective">[docs]</a>    <span class="k">def</span> <span class="nf">get_my_ip_from_host_perspective</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="k">return</span> <span class="s2">&quot;10.0.2.2&quot;</span>
+
+<div class="viewcode-block" id="OpTestQemuSystem.has_host_accessible_eeprom"><a class="viewcode-back" href="../../programming.html#common.OpTestSystem.OpTestQemuSystem.has_host_accessible_eeprom">[docs]</a>    <span class="k">def</span> <span class="nf">has_host_accessible_eeprom</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div></div>
+        <span class="k">return</span> <span class="kc">False</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../index.html">op-test-framework</a></h1>
+
+
+
+
+
+
+<p>
+<iframe src="https://ghbtns.com/github-btn.html?user=open-power&repo=op-test-framework&type=watch&count=true&size=large&v=2"
+  allowtransparency="true" frameborder="0" scrolling="0" width="200px" height="35px"></iframe>
+</p>
+
+
+
+
+
+    
+
+<p>
+<a href="https://travis-ci.org/open-power/op-test-framework">
+    <img
+        alt="https://secure.travis-ci.org/open-power/op-test-framework.svg?branch=master"
+        src="https://secure.travis-ci.org/open-power/op-test-framework.svg?branch=master"
+    />
+</a>
+</p>
+
+
+<h3>Navigation</h3>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../user-guide.html">op-test User Guide</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Programming Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../programming.html">Programming Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../programming.html#generic-classes-modules">Generic Classes/Modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../programming.html#bmc-machine-specific">BMC/Machine Specific</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../programming.html#module-testcases.OpTestFlash">Firmware Flashing</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../index.html">Documentation overview</a><ul>
+  <li><a href="../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    </div>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2018, OpenPOWER Foundation.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.7.1</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.10</a>
+      
+    </div>
+
+    
+    <a href="https://github.com/open-power/op-test-framework" class="github">
+        <img style="position: absolute; top: 0; right: 0; border: 0;" src="https://s3.amazonaws.com/github/ribbons/forkme_right_darkblue_121621.png" alt="Fork me on GitHub"  class="github"/>
+    </a>
+    
+
+    
+  </body>
+</html>

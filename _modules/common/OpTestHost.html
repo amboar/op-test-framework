@@ -1,0 +1,1093 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>common.OpTestHost &#8212; op-test-framework pre-v1.0 documentation</title>
+    <link rel="stylesheet" href="../../_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript" src="../../_static/documentation_options.js"></script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+   
+  <link rel="stylesheet" href="../../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for common.OpTestHost</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/python2</span>
+<span class="c1"># IBM_PROLOG_BEGIN_TAG</span>
+<span class="c1"># This is an automatically generated prolog.</span>
+<span class="c1">#</span>
+<span class="c1"># $Source: op-test-framework/common/OpTestHost.py $</span>
+<span class="c1">#</span>
+<span class="c1"># OpenPOWER Automated Test Project</span>
+<span class="c1">#</span>
+<span class="c1"># Contributors Listed Below - COPYRIGHT 2015</span>
+<span class="c1"># [+] International Business Machines Corp.</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1">#     http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or</span>
+<span class="c1"># implied. See the License for the specific language governing</span>
+<span class="c1"># permissions and limitations under the License.</span>
+<span class="c1">#</span>
+<span class="c1"># IBM_PROLOG_END_TAG</span>
+
+<span class="c1">## @package OpTestHost</span>
+<span class="c1">#  Host package which contains all functions related to HOST communication</span>
+<span class="c1">#</span>
+<span class="c1">#  This class encapsulates all function which deals with the Host</span>
+<span class="c1">#  in OpenPower systems</span>
+
+<span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">string</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">random</span>
+<span class="kn">import</span> <span class="nn">subprocess</span>
+<span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">import</span> <span class="nn">telnetlib</span>
+<span class="kn">import</span> <span class="nn">socket</span>
+<span class="kn">import</span> <span class="nn">select</span>
+<span class="kn">import</span> <span class="nn">pty</span>
+<span class="kn">import</span> <span class="nn">pexpect</span>
+<span class="kn">import</span> <span class="nn">commands</span>
+
+<span class="kn">from</span> <span class="nn">OpTestConstants</span> <span class="k">import</span> <span class="n">OpTestConstants</span> <span class="k">as</span> <span class="n">BMC_CONST</span>
+<span class="kn">from</span> <span class="nn">OpTestError</span> <span class="k">import</span> <span class="n">OpTestError</span>
+<span class="kn">from</span> <span class="nn">OpTestUtil</span> <span class="k">import</span> <span class="n">OpTestUtil</span>
+<span class="kn">from</span> <span class="nn">OpTestSSH</span> <span class="k">import</span> <span class="n">OpTestSSH</span>
+<span class="kn">from</span> <span class="nn">Exceptions</span> <span class="k">import</span> <span class="n">CommandFailed</span><span class="p">,</span> <span class="n">NoKernelConfig</span><span class="p">,</span> <span class="n">KernelModuleNotLoaded</span><span class="p">,</span> <span class="n">KernelConfigNotSet</span>
+
+<div class="viewcode-block" id="OpTestHost"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost">[docs]</a><span class="k">class</span> <span class="nc">OpTestHost</span><span class="p">():</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Initialize this object</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_hostip @type string: IP Address of the host</span>
+    <span class="c1"># @param i_hostuser @type string: Userid to log into the host</span>
+    <span class="c1"># @param i_hostpasswd @type string: Password of the userid to log into the host</span>
+    <span class="c1"># @param i_bmcip @type string: IP Address of the bmc</span>
+    <span class="c1">#</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_hostip</span><span class="p">,</span> <span class="n">i_hostuser</span><span class="p">,</span> <span class="n">i_hostpasswd</span><span class="p">,</span> <span class="n">i_bmcip</span><span class="p">,</span> <span class="n">i_results_dir</span><span class="p">,</span>
+                 <span class="n">scratch_disk</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">proxy</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">logfile</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stdout</span><span class="p">,</span>
+                 <span class="n">check_ssh_keys</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">known_hosts_file</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ip</span> <span class="o">=</span> <span class="n">i_hostip</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">user</span> <span class="o">=</span> <span class="n">i_hostuser</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">passwd</span> <span class="o">=</span> <span class="n">i_hostpasswd</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">util</span> <span class="o">=</span> <span class="n">OpTestUtil</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bmcip</span> <span class="o">=</span> <span class="n">i_bmcip</span>
+        <span class="n">parent_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="vm">__file__</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">results_dir</span> <span class="o">=</span> <span class="n">i_results_dir</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logfile</span> <span class="o">=</span> <span class="n">logfile</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ssh</span> <span class="o">=</span> <span class="n">OpTestSSH</span><span class="p">(</span><span class="n">i_hostip</span><span class="p">,</span> <span class="n">i_hostuser</span><span class="p">,</span> <span class="n">i_hostpasswd</span><span class="p">,</span>
+                <span class="n">logfile</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">logfile</span><span class="p">,</span> <span class="n">check_ssh_keys</span><span class="o">=</span><span class="n">check_ssh_keys</span><span class="p">,</span>
+                <span class="n">known_hosts_file</span><span class="o">=</span><span class="n">known_hosts_file</span><span class="p">,</span> <span class="n">use_default_bash</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scratch_disk</span> <span class="o">=</span> <span class="n">scratch_disk</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">proxy</span> <span class="o">=</span> <span class="n">proxy</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scratch_disk_size</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="OpTestHost.hostname"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.hostname">[docs]</a>    <span class="k">def</span> <span class="nf">hostname</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">ip</span>
+
+<div class="viewcode-block" id="OpTestHost.username"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.username">[docs]</a>    <span class="k">def</span> <span class="nf">username</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">user</span>
+
+<div class="viewcode-block" id="OpTestHost.password"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.password">[docs]</a>    <span class="k">def</span> <span class="nf">password</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">passwd</span>
+
+
+<div class="viewcode-block" id="OpTestHost.get_scratch_disk"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.get_scratch_disk">[docs]</a>    <span class="k">def</span> <span class="nf">get_scratch_disk</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">scratch_disk</span>
+
+<div class="viewcode-block" id="OpTestHost.get_scratch_disk_size"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.get_scratch_disk_size">[docs]</a>    <span class="k">def</span> <span class="nf">get_scratch_disk_size</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">console</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">scratch_disk_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">scratch_disk_size</span>
+        <span class="k">if</span> <span class="n">console</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;You need to call get_scratch_disk_size() with a console first&quot;</span><span class="p">)</span>
+        <span class="n">console</span><span class="o">.</span><span class="n">run_command</span><span class="p">(</span><span class="s2">&quot;stty cols 300&quot;</span><span class="p">)</span>
+        <span class="n">dev_sdX</span> <span class="o">=</span> <span class="n">console</span><span class="o">.</span><span class="n">run_command</span><span class="p">(</span><span class="s2">&quot;readlink -f </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_scratch_disk</span><span class="p">())</span>
+        <span class="n">dev_sdX</span> <span class="o">=</span> <span class="n">dev_sdX</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;/dev/&quot;</span><span class="p">,</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+        <span class="n">scratch_disk_size</span> <span class="o">=</span> <span class="n">console</span><span class="o">.</span><span class="n">run_command</span><span class="p">(</span><span class="s2">&quot;cat /sys/block/</span><span class="si">%s</span><span class="s2">/size&quot;</span> <span class="o">%</span> <span class="n">dev_sdX</span><span class="p">)</span>
+        <span class="c1"># Use the (undocumented) /size sysfs property of nr 512byte sectors</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scratch_disk_size</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">scratch_disk_size</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="o">*</span><span class="mi">512</span>
+
+
+<div class="viewcode-block" id="OpTestHost.get_proxy"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.get_proxy">[docs]</a>    <span class="k">def</span> <span class="nf">get_proxy</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">proxy</span>
+
+<div class="viewcode-block" id="OpTestHost.get_ssh_connection"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.get_ssh_connection">[docs]</a>    <span class="k">def</span> <span class="nf">get_ssh_connection</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">ssh</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Get and Record Ubunto OS level</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return l_oslevel @type string: OS level of the host provided</span>
+    <span class="c1">#         or raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_get_OS_Level"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_get_OS_Level">[docs]</a>    <span class="k">def</span> <span class="nf">host_get_OS_Level</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">l_oslevel</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ssh</span><span class="o">.</span><span class="n">run_command</span><span class="p">(</span><span class="s2">&quot;cat /etc/os-release&quot;</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">l_oslevel</span><span class="p">)</span>
+
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Executes a command on the os of the bmc to protect network setting</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return OpTestError if failed</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_protect_network_setting"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_protect_network_setting">[docs]</a>    <span class="k">def</span> <span class="nf">host_protect_network_setting</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">l_rc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ssh</span><span class="o">.</span><span class="n">run_command</span><span class="p">(</span><span class="n">BMC_CONST</span><span class="o">.</span><span class="n">OS_PRESERVE_NETWORK</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">)</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="n">l_errmsg</span> <span class="o">=</span> <span class="s2">&quot;Can&#39;t preserve network setting&quot;</span>
+            <span class="nb">print</span> <span class="n">l_errmsg</span></div>
+            <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="n">l_errmsg</span><span class="p">)</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Performs a cold reset onto the host</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_cold_reset"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_cold_reset">[docs]</a>    <span class="k">def</span> <span class="nf">host_cold_reset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+
+        <span class="nb">print</span> <span class="p">(</span><span class="s2">&quot;Applying Cold reset on host.&quot;</span><span class="p">)</span>
+        <span class="n">l_rc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ssh</span><span class="o">.</span><span class="n">run_command</span><span class="p">(</span><span class="n">BMC_CONST</span><span class="o">.</span><span class="n">HOST_COLD_RESET</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">)</span>
+
+        <span class="c1"># TODO: enable once defect SW331585 is fixed</span>
+        <span class="sd">&#39;&#39;&#39;if BMC_CONST.BMC_PASS_COLD_RESET in l_rc:</span>
+<span class="sd">            print l_rc</span>
+<span class="sd">            time.sleep(BMC_CONST.BMC_COLD_RESET_DELAY)</span>
+<span class="sd">            return BMC_CONST.FW_SUCCESS</span>
+<span class="sd">        else:</span>
+<span class="sd">            l_msg = &quot;Cold reset Failed&quot;</span>
+<span class="sd">            print l_msg</span>
+<span class="sd">            raise OpTestError(l_msg)&#39;&#39;&#39;</span>
+</div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">PingFunc</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bmcip</span><span class="p">,</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">PING_RETRY_FOR_STABILITY</span><span class="p">)</span>
+
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Flashes image using ipmitool</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_image @type string: hpm file including location</span>
+    <span class="c1"># @param i_imagecomponent @type string: component to be</span>
+    <span class="c1">#        update from the hpm file BMC_CONST.BMC_FW_IMAGE_UPDATE</span>
+    <span class="c1">#        or BMC_CONST.BMC_PNOR_IMAGE</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_code_update"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_code_update">[docs]</a>    <span class="k">def</span> <span class="nf">host_code_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_image</span><span class="p">,</span> <span class="n">imagecomponent</span><span class="p">):</span>
+
+        <span class="c1"># Copy the hpm file to the tmp folder in the host</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">copyFilesToDest</span><span class="p">(</span><span class="n">i_image</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">user</span><span class="p">,</span>
+                                             <span class="bp">self</span><span class="o">.</span><span class="n">ip</span><span class="p">,</span> <span class="s2">&quot;/tmp/&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">passwd</span><span class="p">)</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="n">l_msg</span> <span class="o">=</span> <span class="s2">&quot;Copying hpm file to host failed&quot;</span>
+            <span class="nb">print</span> <span class="n">l_msg</span>
+            <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="n">l_msg</span><span class="p">)</span>
+
+        <span class="c1">#self.host_protect_network_setting() #writing to host is not stable</span>
+        <span class="n">l_cmd</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">echo y | ipmitool -I usb &quot;</span> <span class="o">+</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">BMC_HPM_UPDATE</span> <span class="o">+</span> <span class="s2">&quot;/tmp/&quot;</span> \
+                <span class="o">+</span> <span class="n">i_image</span><span class="o">.</span><span class="n">rsplit</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="s2">&quot; &quot;</span> <span class="o">+</span> <span class="n">imagecomponent</span>
+        <span class="nb">print</span> <span class="n">l_cmd</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">l_rc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ssh</span><span class="o">.</span><span class="n">run_command</span><span class="p">(</span><span class="n">l_cmd</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">1500</span><span class="p">)</span>
+            <span class="nb">print</span> <span class="n">l_rc</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">ssh</span><span class="o">.</span><span class="n">run_command</span><span class="p">(</span><span class="s2">&quot;rm -rf /tmp/&quot;</span> <span class="o">+</span> <span class="n">i_image</span><span class="o">.</span><span class="n">rsplit</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="mi">1</span><span class="p">],</span><span class="n">timeout</span><span class="o">=</span><span class="mi">120</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">CalledProcessError</span><span class="p">:</span>
+            <span class="n">l_msg</span> <span class="o">=</span> <span class="s2">&quot;Code Update Failed&quot;</span>
+            <span class="nb">print</span> <span class="n">l_msg</span>
+            <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="n">l_msg</span><span class="p">)</span>
+
+        <span class="k">if</span><span class="p">(</span><span class="n">l_rc</span><span class="o">.</span><span class="fm">__contains__</span><span class="p">(</span><span class="s2">&quot;Firmware upgrade procedure successful&quot;</span><span class="p">)):</span>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">l_msg</span> <span class="o">=</span> <span class="s2">&quot;Code Update Failed&quot;</span>
+            <span class="nb">print</span> <span class="n">l_msg</span></div>
+            <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="n">l_msg</span><span class="p">)</span>
+
+<div class="viewcode-block" id="OpTestHost.host_run_command"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_run_command">[docs]</a>    <span class="k">def</span> <span class="nf">host_run_command</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_cmd</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">1500</span><span class="p">):</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">ssh</span><span class="o">.</span><span class="n">run_command</span><span class="p">(</span><span class="n">i_cmd</span><span class="p">,</span> <span class="n">timeout</span><span class="p">)</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief It will gather OPAL Message logs and store the copy in a logfile</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS  or raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_gather_opal_msg_log"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_gather_opal_msg_log">[docs]</a>    <span class="k">def</span> <span class="nf">host_gather_opal_msg_log</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">l_data</span> <span class="o">=</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="n">BMC_CONST</span><span class="o">.</span><span class="n">OPAL_MSG_LOG</span><span class="p">))</span>
+        <span class="k">except</span> <span class="n">OpTestError</span><span class="p">:</span>
+            <span class="n">l_msg</span> <span class="o">=</span> <span class="s2">&quot;Failed to gather OPAL message logs&quot;</span>
+            <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="n">l_msg</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_dir</span><span class="p">:</span>
+            <span class="nb">print</span> <span class="n">l_data</span>
+            <span class="k">return</span>
+
+        <span class="n">l_res</span> <span class="o">=</span> <span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">asctime</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">localtime</span><span class="p">()))</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot; &quot;</span><span class="p">,</span> <span class="s2">&quot;_&quot;</span><span class="p">)</span>
+        <span class="n">l_logFile</span> <span class="o">=</span> <span class="s2">&quot;Opal_msglog_</span><span class="si">%s</span><span class="s2">.log&quot;</span> <span class="o">%</span> <span class="n">l_res</span>
+        <span class="n">fn</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">results_dir</span><span class="p">,</span> <span class="n">l_logFile</span><span class="p">)</span>
+        <span class="nb">print</span> <span class="n">fn</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span></div>
+            <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">l_data</span><span class="p">)</span>
+
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Check if one or more binaries are present on host</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_cmd @type string: binaries to check for</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_check_command"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_check_command">[docs]</a>    <span class="k">def</span> <span class="nf">host_check_command</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">i_cmd</span><span class="p">):</span>
+        <span class="n">l_cmd</span> <span class="o">=</span> <span class="s1">&#39;which &#39;</span> <span class="o">+</span> <span class="s1">&#39; &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">i_cmd</span><span class="p">)</span>
+        <span class="nb">print</span> <span class="n">l_cmd</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">l_res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="n">l_cmd</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">CommandFailed</span> <span class="k">as</span> <span class="n">c</span><span class="p">:</span>
+            <span class="n">l_msg</span> <span class="o">=</span> <span class="s2">&quot;host_check_command: (</span><span class="si">%s</span><span class="s2">) not present on host. output of &#39;</span><span class="si">%s</span><span class="s2">&#39;: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="s1">&#39;,&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">i_cmd</span><span class="p">),</span> <span class="n">l_cmd</span><span class="p">,</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">output</span><span class="p">))</span>
+            <span class="nb">print</span> <span class="n">l_msg</span>
+            <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="n">l_msg</span><span class="p">)</span>
+</div>
+        <span class="k">return</span> <span class="kc">True</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief It will get the linux kernel version on host</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return l_kernel @type string: kernel version of the host provided</span>
+    <span class="c1">#         or raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_get_kernel_version"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_get_kernel_version">[docs]</a>    <span class="k">def</span> <span class="nf">host_get_kernel_version</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">l_kernel</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ssh</span><span class="o">.</span><span class="n">run_command</span><span class="p">(</span><span class="s2">&quot;uname -a | awk {&#39;print $3&#39;}&quot;</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">)</span>
+        <span class="n">l_kernel</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">l_kernel</span><span class="p">)</span>
+        <span class="nb">print</span> <span class="n">l_kernel</span></div>
+        <span class="k">return</span> <span class="n">l_kernel</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief This function will checks first for config file for a given kernel version on host,</span>
+    <span class="c1">#        if available then check for config option value and return that value</span>
+    <span class="c1">#            whether it is y or m...etc.</span>
+    <span class="c1">#        sample config option values:</span>
+    <span class="c1">#        CONFIG_CRYPTO_ZLIB=m</span>
+    <span class="c1">#        CONFIG_CRYPTO_LZO=y</span>
+    <span class="c1">#        # CONFIG_CRYPTO_842 is not set</span>
+    <span class="c1">#</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_kernel @type string: kernel version</span>
+    <span class="c1"># @param i_config @type string: Which config option want to check in config file</span>
+    <span class="c1">#                               Ex:CONFIG_SENSORS_IBMPOWERNV</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return l_val @type string: It will return config option value y or m,</span>
+    <span class="c1">#                             or raise OpTestError if config file is not available on host</span>
+    <span class="c1">#                             or raise OpTestError if config option is not set in file.</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_check_config"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_check_config">[docs]</a>    <span class="k">def</span> <span class="nf">host_check_config</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_kernel</span><span class="p">,</span> <span class="n">i_config</span><span class="p">):</span>
+        <span class="n">l_file</span> <span class="o">=</span> <span class="s2">&quot;/boot/config-</span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">i_kernel</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">l_res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ssh</span><span class="o">.</span><span class="n">run_command</span><span class="p">(</span><span class="s2">&quot;test -e </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">l_file</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">CommandFailed</span> <span class="k">as</span> <span class="n">c</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">NoKernelConfig</span><span class="p">(</span><span class="n">i_kernel</span><span class="p">,</span> <span class="n">l_file</span><span class="p">)</span>
+
+        <span class="nb">print</span> <span class="s2">&quot;Config file is available&quot;</span>
+        <span class="n">l_cmd</span> <span class="o">=</span> <span class="s2">&quot;cat </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">l_file</span><span class="p">)</span>
+        <span class="n">l_res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ssh</span><span class="o">.</span><span class="n">run_command</span><span class="p">(</span><span class="n">l_cmd</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">)</span>
+        <span class="n">config_opts</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">l_res</span><span class="p">:</span>
+            <span class="n">m</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="s1">&#39;# (.*) is not set&#39;</span><span class="p">,</span> <span class="n">o</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">m</span><span class="p">:</span>
+                <span class="n">config_opts</span><span class="p">[</span><span class="n">m</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">0</span><span class="p">)]</span><span class="o">=</span><span class="s1">&#39;n&#39;</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="s1">&#39;=&#39;</span> <span class="ow">in</span> <span class="n">o</span><span class="p">:</span>
+                    <span class="n">opt</span><span class="p">,</span> <span class="n">val</span> <span class="o">=</span> <span class="n">o</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;=&quot;</span><span class="p">)</span>
+                    <span class="n">config_opts</span><span class="p">[</span><span class="n">opt</span><span class="p">]</span> <span class="o">=</span> <span class="n">val</span>
+
+        <span class="k">if</span> <span class="n">config_opts</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">i_config</span><span class="p">)</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;y&quot;</span><span class="p">,</span><span class="s2">&quot;m&quot;</span><span class="p">]:</span>
+                <span class="k">raise</span> <span class="n">KernelConfigNotSet</span><span class="p">(</span><span class="n">i_config</span><span class="p">)</span>
+</div>
+        <span class="k">return</span> <span class="n">config_opts</span><span class="p">[</span><span class="n">i_config</span><span class="p">]</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief It will return installed package name for given linux command(i_cmd) on host</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_cmd @type string: linux command</span>
+    <span class="c1"># @param i_oslevel @type string: OS level</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return l_pkg @type string: installed package on host</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_check_pkg_for_utility"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_check_pkg_for_utility">[docs]</a>    <span class="k">def</span> <span class="nf">host_check_pkg_for_utility</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_oslevel</span><span class="p">,</span> <span class="n">i_cmd</span><span class="p">):</span>
+        <span class="k">if</span> <span class="s1">&#39;Ubuntu&#39;</span> <span class="ow">in</span> <span class="n">i_oslevel</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s1">&#39;&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ssh</span><span class="o">.</span><span class="n">run_command</span><span class="p">(</span><span class="s2">&quot;dpkg -S `which </span><span class="si">%s</span><span class="s2">`&quot;</span> <span class="o">%</span> <span class="n">i_cmd</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">l_cmd</span> <span class="o">=</span> <span class="s2">&quot;rpm -qf `which </span><span class="si">%s</span><span class="s2">`&quot;</span> <span class="o">%</span> <span class="n">i_cmd</span></div>
+            <span class="k">return</span> <span class="s1">&#39;&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ssh</span><span class="o">.</span><span class="n">run_command</span><span class="p">(</span><span class="n">l_cmd</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">))</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief This function loads ibmpowernv driver only on powernv platform</span>
+    <span class="c1">#        and also this function works only in root user mode</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_oslevel @type string: OS level</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_load_ibmpowernv"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_load_ibmpowernv">[docs]</a>    <span class="k">def</span> <span class="nf">host_load_ibmpowernv</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_oslevel</span><span class="p">):</span>
+        <span class="k">if</span> <span class="s2">&quot;PowerKVM&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">i_oslevel</span><span class="p">:</span>
+            <span class="n">o</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ssh</span><span class="o">.</span><span class="n">run_command</span><span class="p">(</span><span class="s2">&quot;modprobe ibmpowernv&quot;</span><span class="p">,</span><span class="n">timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">)</span>
+            <span class="n">cmd</span> <span class="o">=</span> <span class="s2">&quot;lsmod | grep -i ibmpowernv&quot;</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ssh</span><span class="o">.</span><span class="n">run_command</span><span class="p">(</span><span class="n">cmd</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">)</span>
+            <span class="k">if</span> <span class="s2">&quot;ibmpowernv&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="s1">&#39;&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">response</span><span class="p">):</span>
+                <span class="n">l_msg</span> <span class="o">=</span> <span class="s2">&quot;ibmpowernv module is not loaded, exiting&quot;</span>
+                <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="n">l_msg</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="nb">print</span> <span class="s2">&quot;ibmpowernv module is loaded&quot;</span>
+            <span class="nb">print</span> <span class="n">cmd</span>
+            <span class="nb">print</span> <span class="n">response</span></div>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief This function restarts the lm_sensors service on host using systemctl utility</span>
+    <span class="c1">#        systemctl utility is not present in ubuntu, This function will work in remaining all</span>
+    <span class="c1">#        other OS&#39;es i.e redhat, sles and PowerKVM</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_oslevel @type string: OS level</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_start_lm_sensor_svc"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_start_lm_sensor_svc">[docs]</a>    <span class="k">def</span> <span class="nf">host_start_lm_sensor_svc</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_oslevel</span><span class="p">):</span>
+        <span class="k">if</span> <span class="s1">&#39;Ubuntu&#39;</span> <span class="ow">in</span> <span class="n">i_oslevel</span><span class="p">:</span>
+            <span class="k">pass</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="c1"># Start the lm_sensors service</span>
+                <span class="n">cmd</span> <span class="o">=</span> <span class="s2">&quot;/bin/systemctl stop  lm_sensors.service&quot;</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="n">cmd</span><span class="p">)</span>
+                <span class="n">cmd</span> <span class="o">=</span> <span class="s2">&quot;/bin/systemctl start  lm_sensors.service&quot;</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="n">cmd</span><span class="p">)</span>
+                <span class="n">cmd</span> <span class="o">=</span> <span class="s2">&quot;/bin/systemctl status  lm_sensors.service&quot;</span>
+                <span class="n">res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="n">cmd</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span>
+            <span class="k">except</span><span class="p">:</span>
+                <span class="n">l_msg</span> <span class="o">=</span> <span class="s2">&quot;loading lm_sensors service failed&quot;</span>
+                <span class="nb">print</span> <span class="n">l_msg</span></div>
+                <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="n">l_msg</span><span class="p">)</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief It will clone latest linux git repository in i_dir directory</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_dir @type string: directory where linux source will be cloned</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_clone_linux_source"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_clone_linux_source">[docs]</a>    <span class="k">def</span> <span class="nf">host_clone_linux_source</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_dir</span><span class="p">):</span>
+        <span class="n">l_msg</span> <span class="o">=</span> <span class="s1">&#39;git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git&#39;</span>
+        <span class="n">l_cmd</span> <span class="o">=</span> <span class="s2">&quot;git clone --depth=1 </span><span class="si">%s</span><span class="s2"> </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">l_msg</span><span class="p">,</span> <span class="n">i_dir</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ssh</span><span class="o">.</span><span class="n">run_command</span><span class="p">(</span><span class="s2">&quot;rm -rf </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">i_dir</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">300</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ssh</span><span class="o">.</span><span class="n">run_command</span><span class="p">(</span><span class="s2">&quot;mkdir </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">i_dir</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="nb">print</span> <span class="n">l_cmd</span>
+            <span class="n">res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ssh</span><span class="o">.</span><span class="n">run_command</span><span class="p">(</span><span class="n">l_cmd</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">1500</span><span class="p">)</span>
+            <span class="nb">print</span> <span class="n">res</span>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="n">l_msg</span> <span class="o">=</span> <span class="s2">&quot;Cloning linux git repository is failed&quot;</span>
+            <span class="nb">print</span> <span class="n">l_msg</span></div>
+            <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="n">l_msg</span><span class="p">)</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief reads getscom data</span>
+    <span class="c1"># example:</span>
+    <span class="c1"># Chip ID  | Rev   | Chip type</span>
+    <span class="c1"># ---------|-------|--------</span>
+    <span class="c1"># 80000005 | DD2.0 | Centaur memory buffer</span>
+    <span class="c1"># 80000004 | DD2.0 | Centaur memory buffer</span>
+    <span class="c1"># 00000000 | DD2.0 | P8 (Venice) processor</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_xscom_dir @type string: directory where getscom is installed</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return @type string: getscom data</span>
+    <span class="c1">#        else raise OpTestError</span>
+<div class="viewcode-block" id="OpTestHost.host_read_getscom_data"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_read_getscom_data">[docs]</a>    <span class="k">def</span> <span class="nf">host_read_getscom_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_xscom_dir</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">l_rc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ssh</span><span class="o">.</span><span class="n">run_command</span><span class="p">(</span><span class="n">BMC_CONST</span><span class="o">.</span><span class="n">SUDO_COMMAND</span> <span class="o">+</span> <span class="n">i_xscom_dir</span> <span class="o">+</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">OS_GETSCOM_LIST</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">OpTestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">l_errmsg</span> <span class="o">=</span> <span class="s2">&quot;Can&#39;t get getscom data&quot;</span>
+            <span class="nb">print</span> <span class="n">l_errmsg</span>
+            <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="n">l_errmsg</span><span class="p">)</span>
+
+        <span class="k">if</span><span class="p">(</span><span class="s2">&quot;command not found&quot;</span> <span class="ow">in</span> <span class="n">l_rc</span><span class="p">):</span>
+            <span class="n">l_errmsg</span> <span class="o">=</span> <span class="s2">&quot;Failed to locate getscom. Make sure it is installed in dir: &quot;</span> <span class="o">+</span> <span class="n">i_xscom_dir</span>
+            <span class="nb">print</span> <span class="n">l_errmsg</span>
+            <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="n">l_errmsg</span><span class="p">)</span>
+</div>
+        <span class="k">return</span> <span class="n">l_rc</span>
+
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief injects error using getscom</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_xscom_dir @type string: directory where putscom is installed</span>
+    <span class="c1"># param i_error @type string: error to be injected including the location</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return output generated after executing putscom command or else raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_putscom"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_putscom">[docs]</a>    <span class="k">def</span> <span class="nf">host_putscom</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_xscom_dir</span><span class="p">,</span> <span class="n">i_error</span><span class="p">):</span>
+
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Injecting Error.&#39;</span><span class="p">)</span></div>
+        <span class="n">l_rc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ssh</span><span class="o">.</span><span class="n">run_command_ignore_fail</span><span class="p">(</span><span class="n">BMC_CONST</span><span class="o">.</span><span class="n">SUDO_COMMAND</span> <span class="o">+</span> <span class="n">i_xscom_dir</span> <span class="o">+</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">OS_PUTSCOM_ERROR</span> <span class="o">+</span> <span class="n">i_error</span><span class="p">)</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Clears the gard records</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_gard_dir @type string: directory where putscom is installed</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or else raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_clear_gard_records"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_clear_gard_records">[docs]</a>    <span class="k">def</span> <span class="nf">host_clear_gard_records</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_gard_dir</span><span class="p">):</span>
+
+        <span class="n">l_rc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ssh</span><span class="o">.</span><span class="n">run_command</span><span class="p">(</span><span class="n">BMC_CONST</span><span class="o">.</span><span class="n">SUDO_COMMAND</span> <span class="o">+</span> <span class="n">i_gard_dir</span> <span class="o">+</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">CLEAR_GARD_CMD</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">)</span>
+
+        <span class="k">if</span><span class="p">(</span><span class="n">BMC_CONST</span><span class="o">.</span><span class="n">GARD_CLEAR_SUCCESSFUL</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">l_rc</span><span class="p">):</span>
+            <span class="n">l_msg</span> <span class="o">=</span> <span class="n">l_rc</span> <span class="o">+</span> <span class="s1">&#39;. Failed to clear gard&#39;</span>
+            <span class="nb">print</span> <span class="n">l_msg</span>
+            <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="n">l_msg</span><span class="p">)</span>
+
+        <span class="c1"># Check to make sure no gard records were left</span>
+        <span class="n">l_result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">host_list_gard_records</span><span class="p">(</span><span class="n">i_gard_dir</span><span class="p">)</span>
+        <span class="k">if</span><span class="p">(</span><span class="n">BMC_CONST</span><span class="o">.</span><span class="n">NO_GARD_RECORDS</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">l_result</span><span class="p">):</span>
+            <span class="n">l_msg</span> <span class="o">=</span> <span class="n">l_rc</span> <span class="o">+</span> <span class="s1">&#39;. Gard records still found after clearing them&#39;</span>
+            <span class="nb">print</span> <span class="n">l_msg</span>
+            <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="n">l_msg</span><span class="p">)</span>
+</div>
+        <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span>
+
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Lists all gard records</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_gard_dir @type string: directory where putscom is installed</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return gard records or else raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_list_gard_records"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_list_gard_records">[docs]</a>    <span class="k">def</span> <span class="nf">host_list_gard_records</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_gard_dir</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">ssh</span><span class="o">.</span><span class="n">run_command</span><span class="p">(</span><span class="n">BMC_CONST</span><span class="o">.</span><span class="n">SUDO_COMMAND</span> <span class="o">+</span> <span class="n">i_gard_dir</span> <span class="o">+</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">LIST_GARD_CMD</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">)</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="n">l_errmsg</span> <span class="o">=</span> <span class="s2">&quot;Can&#39;t clear gard records&quot;</span>
+            <span class="nb">print</span> <span class="n">l_errmsg</span></div>
+            <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="n">l_errmsg</span><span class="p">)</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief enable/disable cpu states</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_cpu_state @type string: BMC_CONST.CPU_ENABLE_STATE/</span>
+    <span class="c1">#                                  BMC_CONST.CPU_DISABLE_STATE</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_disable_enable_cpu_states"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_disable_enable_cpu_states">[docs]</a>    <span class="k">def</span> <span class="nf">host_disable_enable_cpu_states</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_cpu_state</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">ssh</span><span class="o">.</span><span class="n">run_command</span><span class="p">(</span><span class="n">BMC_CONST</span><span class="o">.</span><span class="n">SUDO_COMMAND</span> <span class="o">+</span> <span class="s2">&quot;sh -c &#39;for i in &quot;</span> <span class="o">+</span> \
+                              <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">CPU_IDLEMODE_STATE1</span> <span class="o">+</span> <span class="s2">&quot;; do echo &quot;</span> <span class="o">+</span> \
+                              <span class="n">i_cpu_state</span>  <span class="o">+</span> <span class="s2">&quot; &gt; $i; done&#39;&quot;</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">ssh</span><span class="o">.</span><span class="n">run_command</span><span class="p">(</span><span class="n">BMC_CONST</span><span class="o">.</span><span class="n">SUDO_COMMAND</span> <span class="o">+</span> <span class="s2">&quot;sh -c &#39;for i in &quot;</span> <span class="o">+</span> \
+                              <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">CPU_IDLEMODE_STATE2</span> <span class="o">+</span> <span class="s2">&quot;; do echo &quot;</span> <span class="o">+</span> \
+                              <span class="n">i_cpu_state</span>  <span class="o">+</span> <span class="s2">&quot; &gt; $i; done&#39;&quot;</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="n">l_errmsg</span> <span class="o">=</span> <span class="s2">&quot;Could not enable/disable cpu idle states&quot;</span>
+            <span class="nb">print</span> <span class="n">l_errmsg</span></div>
+            <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="n">l_errmsg</span><span class="p">)</span>
+
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief It will load the module using modprobe and verify whether it is loaded or not</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_module @type string: module name, which we want to load on host</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_load_module"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_load_module">[docs]</a>    <span class="k">def</span> <span class="nf">host_load_module</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_module</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">l_res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;modprobe </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">i_module</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">CommandFailed</span> <span class="k">as</span> <span class="n">c</span><span class="p">:</span>
+            <span class="n">l_msg</span> <span class="o">=</span> <span class="s2">&quot;Error in loading the module </span><span class="si">%s</span><span class="s2">, modprobe failed: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">i_module</span><span class="p">,</span><span class="nb">str</span><span class="p">(</span><span class="n">c</span><span class="p">))</span>
+            <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="n">l_msg</span><span class="p">)</span>
+        <span class="n">l_res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;lsmod | grep -i --color=never </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">i_module</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">i_module</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">l_res</span><span class="p">)):</span>
+            <span class="nb">print</span> <span class="s2">&quot;</span><span class="si">%s</span><span class="s2"> module is loaded&quot;</span> <span class="o">%</span> <span class="n">i_module</span>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span>
+        <span class="k">else</span><span class="p">:</span></div>
+            <span class="k">raise</span> <span class="n">KernelModuleNotLoaded</span><span class="p">(</span><span class="n">i_module</span><span class="p">)</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief This function will read real time clock(RTC) time using hwclock utility</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return l_res @type string: return hwclock value if command execution successfull</span>
+    <span class="c1">#           else raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_read_hwclock"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_read_hwclock">[docs]</a>    <span class="k">def</span> <span class="nf">host_read_hwclock</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="nb">print</span> <span class="s2">&quot;Reading the hwclock&quot;</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;hwclock -r;echo $?&quot;</span><span class="p">)</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief This function will read system time using date utility (This will be mantained by kernel)</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return l_res @type string: return system time value if command execution successfull</span>
+    <span class="c1">#           else raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_read_systime"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_read_systime">[docs]</a>    <span class="k">def</span> <span class="nf">host_read_systime</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="nb">print</span> <span class="s2">&quot;Reading system time using date utility&quot;</span>
+        <span class="n">l_res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;date&quot;</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="n">l_res</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief This function will set hwclock time using the --date option</span>
+    <span class="c1">#        format should be &quot;2015-01-01 12:12:12&quot;</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_time @type string: this is the time for setting the hwclock</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_set_hwclock_time"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_set_hwclock_time">[docs]</a>    <span class="k">def</span> <span class="nf">host_set_hwclock_time</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_time</span><span class="p">):</span>
+        <span class="nb">print</span> <span class="s2">&quot;Setting the hwclock time to </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">i_time</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;hwclock --set --date </span><span class="se">\&#39;</span><span class="si">%s</span><span class="se">\&#39;</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">i_time</span><span class="p">)</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief This function will load driver module on host based on the config option</span>
+    <span class="c1">#        if config value m: built as a module</span>
+    <span class="c1">#                        y: driver built into kernel itself</span>
+    <span class="c1">#        else   raises OpTestError</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_kernel @type string: kernel version to get config file</span>
+    <span class="c1">#        i_config @type string: config option to check in config file</span>
+    <span class="c1">#        i_module @type string: driver module to load on host based on config value</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_load_module_based_on_config"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_load_module_based_on_config">[docs]</a>    <span class="k">def</span> <span class="nf">host_load_module_based_on_config</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_kernel</span><span class="p">,</span> <span class="n">i_config</span><span class="p">,</span> <span class="n">i_module</span><span class="p">):</span>
+        <span class="n">l_val</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">host_check_config</span><span class="p">(</span><span class="n">i_kernel</span><span class="p">,</span> <span class="n">i_config</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">l_val</span> <span class="o">==</span> <span class="s1">&#39;m&#39;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">host_load_module</span><span class="p">(</span><span class="n">i_module</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">l_val</span> <span class="o">==</span> <span class="s1">&#39;y&#39;</span><span class="p">:</span>
+            <span class="nb">print</span> <span class="s2">&quot;Driver built into kernel itself&quot;</span>
+        <span class="k">elif</span> <span class="n">l_val</span> <span class="o">==</span> <span class="s1">&#39;n&#39;</span><span class="p">:</span></div>
+            <span class="k">raise</span> <span class="n">KernelConfigNotSet</span><span class="p">(</span><span class="n">i_config</span><span class="p">)</span>
+
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief It will clone latest skiboot git repository in i_dir directory</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_dir @type string: directory where skiboot source will be cloned</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_clone_skiboot_source"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_clone_skiboot_source">[docs]</a>    <span class="k">def</span> <span class="nf">host_clone_skiboot_source</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_dir</span><span class="p">):</span>
+        <span class="n">l_msg</span> <span class="o">=</span> <span class="s1">&#39;https://github.com/open-power/skiboot.git/&#39;</span>
+        <span class="n">l_cmd</span> <span class="o">=</span> <span class="s2">&quot;git clone </span><span class="si">%s</span><span class="s2"> </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">l_msg</span><span class="p">,</span> <span class="n">i_dir</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;git config --global http.sslverify false&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;rm -rf </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">i_dir</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;mkdir </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">i_dir</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="nb">print</span> <span class="n">l_cmd</span>
+            <span class="n">l_res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="n">l_cmd</span><span class="p">)</span>
+            <span class="nb">print</span> <span class="n">l_res</span>
+            <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="n">l_msg</span> <span class="o">=</span> <span class="s2">&quot;Cloning skiboot git repository is failed&quot;</span>
+            <span class="nb">print</span> <span class="n">l_msg</span></div>
+            <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="n">l_msg</span><span class="p">)</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief This function enable only a single core</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_enable_single_core"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_enable_single_core">[docs]</a>    <span class="k">def</span> <span class="nf">host_enable_single_core</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;ppc64_cpu --cores-on=1&quot;</span><span class="p">)</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief This function is used to get list of PCI PHB domains.</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return self.pci_domains list of PHB domains @type list or raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_get_list_of_pci_domains"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_get_list_of_pci_domains">[docs]</a>    <span class="k">def</span> <span class="nf">host_get_list_of_pci_domains</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pci_domains</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;lspci -mm&quot;</span><span class="p">)</span>
+        <span class="n">res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s1">&#39;lspci -mm | cut -d&quot;:&quot; -f1 | sort | uniq&#39;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">domain</span> <span class="ow">in</span> <span class="n">res</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">domain</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">domain</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">4</span><span class="p">:</span>
+                <span class="n">domain</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">((</span><span class="s2">&quot;00&quot;</span><span class="p">,</span> <span class="n">domain</span><span class="p">))</span>
+            <span class="n">domain</span> <span class="o">=</span> <span class="s1">&#39;PCI&#39;</span> <span class="o">+</span> <span class="n">domain</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">pci_domains</span><span class="o">.</span><span class="fm">__contains__</span><span class="p">(</span><span class="n">domain</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">pci_domains</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">domain</span><span class="p">)</span>
+        <span class="nb">print</span> <span class="bp">self</span><span class="o">.</span><span class="n">pci_domains</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">pci_domains</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief This function is used to get the PHB domain of root port where</span>
+    <span class="c1">#        the filesystem is mounted(We need to skip this in EEH tests as recovery</span>
+    <span class="c1">#        will fail on this domain is expected)</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return boot_domain root PHB @type string or raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_get_root_phb"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_get_root_phb">[docs]</a>    <span class="k">def</span> <span class="nf">host_get_root_phb</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">cmd</span> <span class="o">=</span> <span class="s2">&quot;df -h /boot | awk &#39;END {print $1}&#39;&quot;</span>
+        <span class="n">res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="n">cmd</span><span class="p">)</span>
+        <span class="n">boot_disk</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">res</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;/dev/&quot;</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">boot_disk</span> <span class="o">=</span> <span class="n">boot_disk</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\r\n</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+        <span class="n">cmd</span>  <span class="o">=</span> <span class="s2">&quot;ls -l /dev/disk/by-path/ | grep </span><span class="si">%s</span><span class="s2"> | awk &#39;{print $(NF-2)}&#39;&quot;</span> <span class="o">%</span> <span class="n">boot_disk</span>
+        <span class="n">res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="n">cmd</span><span class="p">)</span>
+        <span class="n">matchObj</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;\d</span><span class="si">{4}</span><span class="s2">(?!\d)&quot;</span><span class="p">,</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">res</span><span class="p">),</span> <span class="n">re</span><span class="o">.</span><span class="n">S</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">matchObj</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="s2">&quot;Not able to find out root phb domain&quot;</span><span class="p">)</span>
+        <span class="n">boot_domain</span> <span class="o">=</span> <span class="s1">&#39;PCI&#39;</span> <span class="o">+</span> <span class="n">matchObj</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span></div>
+        <span class="k">return</span>  <span class="n">boot_domain</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief It will gather kernel dmesg logs and store the copy in a logfile</span>
+    <span class="c1">#        which will be stored in results dir.</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS  or raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_gather_kernel_log"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_gather_kernel_log">[docs]</a>    <span class="k">def</span> <span class="nf">host_gather_kernel_log</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">l_data</span> <span class="o">=</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;dmesg&quot;</span><span class="p">))</span>
+        <span class="k">except</span> <span class="n">OpTestError</span><span class="p">:</span>
+            <span class="n">l_msg</span> <span class="o">=</span> <span class="s2">&quot;Failed to gather kernel dmesg log&quot;</span>
+            <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="n">l_msg</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_dir</span><span class="p">:</span>
+            <span class="nb">print</span> <span class="n">l_data</span>
+            <span class="k">return</span>
+        <span class="n">l_res</span> <span class="o">=</span> <span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">asctime</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">localtime</span><span class="p">()))</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot; &quot;</span><span class="p">,</span> <span class="s2">&quot;_&quot;</span><span class="p">)</span>
+        <span class="n">l_logFile</span> <span class="o">=</span> <span class="s2">&quot;Kernel_dmesg_log_</span><span class="si">%s</span><span class="s2">.log&quot;</span> <span class="o">%</span> <span class="n">l_res</span>
+        <span class="n">fn</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">results_dir</span><span class="p">,</span> <span class="n">l_logFile</span><span class="p">)</span>
+        <span class="nb">print</span> <span class="n">fn</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">l_data</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">FW_SUCCESS</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief This function starts opal_errd daemon</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_start_opal_errd_daemon"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_start_opal_errd_daemon">[docs]</a>    <span class="k">def</span> <span class="nf">host_start_opal_errd_daemon</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;systemctl start opal_errd&quot;</span><span class="p">)</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief This function stops opal_errd daemon</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_stop_opal_errd_daemon"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_stop_opal_errd_daemon">[docs]</a>    <span class="k">def</span> <span class="nf">host_stop_opal_errd_daemon</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;systemctl stop opal_errd&quot;</span><span class="p">)</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief This function gets the status of opal_errd daemon</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return True/False: if opal_errd run/not run or throws exception</span>
+    <span class="c1">#                     if not able to get status</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_get_status_of_opal_errd_daemon"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_get_status_of_opal_errd_daemon">[docs]</a>    <span class="k">def</span> <span class="nf">host_get_status_of_opal_errd_daemon</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;ps -ef | grep -v grep | grep opal_errd | wc -l&quot;</span><span class="p">)</span>
+        <span class="nb">print</span> <span class="n">res</span>
+        <span class="k">if</span> <span class="n">res</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;0&quot;</span><span class="p">:</span>
+            <span class="nb">print</span> <span class="s2">&quot;Opal_errd daemon is not running&quot;</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">elif</span> <span class="n">res</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;1&quot;</span><span class="p">:</span>
+            <span class="nb">print</span> <span class="s2">&quot;Opal_errd daemon is running&quot;</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">else</span><span class="p">:</span></div>
+            <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="s2">&quot;Not able to get status of opal errd daemon&quot;</span><span class="p">)</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief This function lists all error logs in host</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_list_all_errorlogs"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_list_all_errorlogs">[docs]</a>    <span class="k">def</span> <span class="nf">host_list_all_errorlogs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;opal-elog-parse -l&quot;</span><span class="p">)</span>
+
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief This function lists all service action logs in host</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_list_all_service_action_logs"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_list_all_service_action_logs">[docs]</a>    <span class="k">def</span> <span class="nf">host_list_all_service_action_logs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;opal-elog-parse -s&quot;</span><span class="p">)</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief This function gets the number of error logs</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return res or raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_get_number_of_errorlogs"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_get_number_of_errorlogs">[docs]</a>    <span class="k">def</span> <span class="nf">host_get_number_of_errorlogs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;ls </span><span class="si">%s</span><span class="s2"> | wc -l&quot;</span> <span class="o">%</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">OPAL_ELOG_DIR</span><span class="p">)</span>
+        <span class="nb">print</span> <span class="n">res</span></div>
+        <span class="k">return</span> <span class="n">res</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief This function clears/acknowledges all error logs in host</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return True on success or raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_clear_error_logs"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_clear_error_logs">[docs]</a>    <span class="k">def</span> <span class="nf">host_clear_error_logs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;rm -f </span><span class="si">%s</span><span class="s2">/*&quot;</span> <span class="o">%</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">OPAL_ELOG_DIR</span><span class="p">)</span>
+        <span class="n">res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;ls </span><span class="si">%s</span><span class="s2"> -1 --color=never&quot;</span> <span class="o">%</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">OPAL_ELOG_SYSFS_DIR</span><span class="p">)</span>
+        <span class="nb">print</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">res</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">res</span><span class="p">:</span>
+            <span class="n">entry</span> <span class="o">=</span> <span class="n">entry</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">entry</span> <span class="o">==</span> <span class="s1">&#39;&#39;</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;echo 1 &gt; </span><span class="si">%s</span><span class="s2">/</span><span class="si">%s</span><span class="s2">/acknowledge&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">BMC_CONST</span><span class="o">.</span><span class="n">OPAL_ELOG_SYSFS_DIR</span><span class="p">,</span> <span class="n">entry</span><span class="p">))</span></div>
+        <span class="k">return</span> <span class="kc">True</span>
+    <span class="c1">##</span>
+    <span class="c1"># @brief This function clears/acknowledges all dumps in host</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return True on success or raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_clear_all_dumps"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_clear_all_dumps">[docs]</a>    <span class="k">def</span> <span class="nf">host_clear_all_dumps</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;rm -f </span><span class="si">%s</span><span class="s2">/*&quot;</span> <span class="o">%</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">OPAL_DUMP_DIR</span><span class="p">)</span>
+        <span class="n">res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;ls </span><span class="si">%s</span><span class="s2"> -1 --color=never&quot;</span> <span class="o">%</span> <span class="n">BMC_CONST</span><span class="o">.</span><span class="n">OPAL_DUMP_SYSFS_DIR</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">res</span><span class="p">:</span>
+            <span class="n">entry</span> <span class="o">=</span> <span class="n">entry</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">entry</span> <span class="o">==</span> <span class="s2">&quot;initiate_dump&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="n">entry</span> <span class="o">==</span> <span class="s1">&#39;&#39;</span><span class="p">):</span>
+                <span class="k">continue</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;echo 1 &gt; </span><span class="si">%s</span><span class="s2">/</span><span class="si">%s</span><span class="s2">/acknowledge&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">BMC_CONST</span><span class="o">.</span><span class="n">OPAL_DUMP_SYSFS_DIR</span><span class="p">,</span> <span class="n">entry</span><span class="p">))</span></div>
+        <span class="k">return</span> <span class="kc">True</span>
+
+    <span class="c1"># @brief This function disables kdump service</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param os_level: string output of /etc/os-release</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_disable_kdump_service"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_disable_kdump_service">[docs]</a>    <span class="k">def</span> <span class="nf">host_disable_kdump_service</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">os_level</span><span class="p">):</span>
+        <span class="k">if</span> <span class="s2">&quot;Ubuntu&quot;</span> <span class="ow">in</span> <span class="n">os_level</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;systemctl stop kdump-tools.service&quot;</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;systemctl status kdump-tools.service&quot;</span><span class="p">)</span>
+            <span class="k">except</span> <span class="n">CommandFailed</span> <span class="k">as</span> <span class="n">cf</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">cf</span><span class="o">.</span><span class="n">exitcode</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+                    <span class="k">pass</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="nb">print</span> <span class="nb">str</span><span class="p">(</span><span class="n">cf</span><span class="p">)</span>
+                    <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="s2">&quot;kdump-tools service is failed to stop&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;systemctl stop kdump.service&quot;</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;systemctl status kdump.service&quot;</span><span class="p">)</span>
+            <span class="k">except</span> <span class="n">CommandFailed</span> <span class="k">as</span> <span class="n">cf</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">cf</span><span class="o">.</span><span class="n">exitcode</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+                    <span class="k">pass</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="nb">print</span> <span class="nb">str</span><span class="p">(</span><span class="n">cf</span><span class="p">)</span></div>
+                    <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="s2">&quot;kdump service is failed to stop&quot;</span><span class="p">)</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief This function disables kdump service</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param os_level: string output of /etc/os-release</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return BMC_CONST.FW_SUCCESS or raise OpTestError</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_enable_kdump_service"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_enable_kdump_service">[docs]</a>    <span class="k">def</span> <span class="nf">host_enable_kdump_service</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">os_level</span><span class="p">):</span>
+        <span class="k">if</span> <span class="s2">&quot;Ubuntu&quot;</span> <span class="ow">in</span> <span class="n">os_level</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;systemctl stop kdump-tools.service&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;systemctl start kdump-tools.service&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;systemctl status kdump-tools.service&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;systemctl stop kdump.service&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;systemctl start kdump.service&quot;</span><span class="p">)</span></div>
+            <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;systemctl status kdump.service&quot;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="OpTestHost.host_check_sysfs_path_availability"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_check_sysfs_path_availability">[docs]</a>    <span class="k">def</span> <span class="nf">host_check_sysfs_path_availability</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
+        <span class="n">res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;ls </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">path</span><span class="p">)</span>
+        <span class="k">if</span> <span class="s2">&quot;No such file or directory&quot;</span> <span class="ow">in</span> <span class="n">res</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span></div>
+        <span class="k">return</span> <span class="kc">True</span>
+
+<div class="viewcode-block" id="OpTestHost.host_check_dt_node_exist"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_check_dt_node_exist">[docs]</a>    <span class="k">def</span> <span class="nf">host_check_dt_node_exist</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">node_path</span><span class="p">):</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="s2">&quot;/proc/device-tree/&quot;</span> <span class="o">+</span> <span class="n">node_path</span>
+        <span class="n">res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;ls </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">path</span><span class="p">)</span>
+        <span class="k">if</span> <span class="s2">&quot;No such file or directory&quot;</span> <span class="ow">in</span> <span class="n">res</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span></div>
+        <span class="k">return</span> <span class="kc">True</span>
+
+<div class="viewcode-block" id="OpTestHost.host_get_list_of_chips"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_get_list_of_chips">[docs]</a>    <span class="k">def</span> <span class="nf">host_get_list_of_chips</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;PATH=/usr/local/sbin:$PATH getscom -l&quot;</span><span class="p">)</span>
+        <span class="n">chips</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">res</span><span class="p">:</span>
+            <span class="n">matchObj</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="s2">&quot;(\d</span><span class="si">{8}</span><span class="s2">).*processor&quot;</span><span class="p">,</span> <span class="n">line</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">matchObj</span><span class="p">:</span>
+                <span class="n">chips</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">matchObj</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">chips</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Getscom failed to list processor chip ids&quot;</span><span class="p">)</span>
+        <span class="n">chips</span><span class="o">.</span><span class="n">sort</span><span class="p">()</span>
+        <span class="nb">print</span> <span class="n">chips</span> <span class="c1"># [&#39;00000000&#39;, &#39;00000001&#39;, &#39;00000010&#39;]</span></div>
+        <span class="k">return</span> <span class="n">chips</span>
+
+<div class="viewcode-block" id="OpTestHost.host_get_cores"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_get_cores">[docs]</a>    <span class="k">def</span> <span class="nf">host_get_cores</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">proc_gen</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">host_get_proc_gen</span><span class="p">()</span>
+        <span class="n">core_ids</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">cpu_pirs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;find /sys/devices/system/cpu/*/pir -exec cat </span><span class="si">{}</span><span class="s2"> \;&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">pir</span> <span class="ow">in</span> <span class="n">cpu_pirs</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">proc_gen</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;POWER8&quot;</span><span class="p">,</span> <span class="s2">&quot;POWER8E&quot;</span><span class="p">]:</span>
+                <span class="n">core_id</span> <span class="o">=</span> <span class="nb">hex</span><span class="p">((</span><span class="nb">int</span><span class="p">(</span><span class="s2">&quot;0x</span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">pir</span><span class="p">,</span> <span class="mi">16</span><span class="p">)</span> <span class="o">&gt;&gt;</span> <span class="mi">3</span> <span class="p">)</span> <span class="o">&amp;</span> <span class="mh">0xf</span><span class="p">)</span>
+                <span class="n">chip_id</span> <span class="o">=</span> <span class="nb">hex</span><span class="p">((</span><span class="nb">int</span><span class="p">(</span><span class="s2">&quot;0x</span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">pir</span><span class="p">,</span> <span class="mi">16</span><span class="p">)</span> <span class="o">&gt;&gt;</span> <span class="mi">7</span> <span class="p">)</span> <span class="o">&amp;</span> <span class="mh">0x3f</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">proc_gen</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;POWER9&quot;</span><span class="p">]:</span>
+                <span class="n">core_id</span> <span class="o">=</span><span class="nb">hex</span><span class="p">((</span><span class="nb">int</span><span class="p">(</span><span class="s2">&quot;0x</span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">pir</span><span class="p">,</span> <span class="mi">16</span><span class="p">)</span> <span class="o">&gt;&gt;</span> <span class="mi">2</span> <span class="p">)</span> <span class="o">&amp;</span> <span class="mh">0x3f</span><span class="p">)</span>
+                <span class="n">chip_id</span> <span class="o">=</span> <span class="nb">hex</span><span class="p">((</span><span class="nb">int</span><span class="p">(</span><span class="s2">&quot;0x</span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">pir</span><span class="p">,</span> <span class="mi">16</span><span class="p">)</span> <span class="o">&gt;&gt;</span> <span class="mi">8</span> <span class="p">)</span> <span class="o">&amp;</span> <span class="mh">0x7f</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="s2">&quot;Unknown or new processor type&quot;</span><span class="p">)</span>
+            <span class="n">core_id</span> <span class="o">=</span> <span class="n">core_id</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;x&#39;</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">chip_id</span> <span class="o">=</span> <span class="n">chip_id</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;x&#39;</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span>
+
+            <span class="k">if</span> <span class="n">chip_id</span> <span class="ow">in</span> <span class="n">core_ids</span><span class="p">:</span>
+                <span class="n">core_ids</span><span class="p">[</span><span class="n">chip_id</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">core_id</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">core_ids</span><span class="p">[</span><span class="n">chip_id</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">core_id</span><span class="p">]</span>
+
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">core_ids</span><span class="p">:</span>
+            <span class="n">core_ids</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">core_ids</span><span class="p">[</span><span class="n">i</span><span class="p">]))</span>
+        <span class="n">core_ids</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">core_ids</span><span class="o">.</span><span class="n">iteritems</span><span class="p">())</span>
+        <span class="nb">print</span> <span class="n">core_ids</span></div>
+        <span class="k">return</span> <span class="n">core_ids</span>
+
+    <span class="c1"># Supported on OpenPower and P9 FSP system</span>
+<div class="viewcode-block" id="OpTestHost.host_prd_supported"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_prd_supported">[docs]</a>    <span class="k">def</span> <span class="nf">host_prd_supported</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bmc_type</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="s2">&quot;FSP&quot;</span> <span class="ow">in</span> <span class="n">bmc_type</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">True</span>
+
+        <span class="n">proc_gen</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">host_get_proc_gen</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">proc_gen</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;POWER8&quot;</span><span class="p">,</span> <span class="s2">&quot;POWER8E&quot;</span><span class="p">]:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+</div>
+        <span class="k">return</span> <span class="kc">True</span>
+
+<div class="viewcode-block" id="OpTestHost.host_get_proc_gen"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_get_proc_gen">[docs]</a>    <span class="k">def</span> <span class="nf">host_get_proc_gen</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">proc_gen</span><span class="p">:</span>
+                <span class="k">pass</span>
+        <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">proc_gen</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;grep &#39;^cpu&#39; /proc/cpuinfo |uniq|sed -e &#39;s/^.*: //;s/[,]* .*//;&#39;&quot;</span><span class="p">))</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">proc_gen</span>
+
+<div class="viewcode-block" id="OpTestHost.host_get_smt"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_get_smt">[docs]</a>    <span class="k">def</span> <span class="nf">host_get_smt</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cpu</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">host_get_proc_gen</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cpu</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;POWER8&quot;</span><span class="p">,</span> <span class="s2">&quot;POWER8E&quot;</span><span class="p">]:</span>
+            <span class="k">return</span> <span class="mi">8</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">cpu</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;POWER9&quot;</span><span class="p">]:</span>
+            <span class="k">return</span> <span class="mi">4</span>
+        <span class="k">else</span><span class="p">:</span></div>
+            <span class="k">return</span> <span class="mi">1</span>
+
+<div class="viewcode-block" id="OpTestHost.host_get_core_count"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_get_core_count">[docs]</a>    <span class="k">def</span> <span class="nf">host_get_core_count</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;lscpu --all -e| wc -l&quot;</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">res</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="o">/</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">host_get_smt</span><span class="p">())</span>
+
+<div class="viewcode-block" id="OpTestHost.host_gather_debug_logs"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_gather_debug_logs">[docs]</a>    <span class="k">def</span> <span class="nf">host_gather_debug_logs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ssh</span><span class="o">.</span><span class="n">run_command_ignore_fail</span><span class="p">(</span><span class="s2">&quot;grep &#39;,[0-4]\]&#39; /sys/firmware/opal/msglog&quot;</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ssh</span><span class="o">.</span><span class="n">run_command_ignore_fail</span><span class="p">(</span><span class="s2">&quot;dmesg -T --level=alert,crit,err,warn&quot;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="OpTestHost.host_copy_fake_gard"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_copy_fake_gard">[docs]</a>    <span class="k">def</span> <span class="nf">host_copy_fake_gard</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s2">&quot;common&quot;</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">pardir</span><span class="p">))</span>
+        <span class="n">i_image</span> <span class="o">=</span> <span class="n">path</span> <span class="o">+</span> <span class="s2">&quot;/test_binaries/fake.gard&quot;</span>
+        <span class="c1"># Copy the fake.gard file to the tmp folder in the host</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">copyFilesToDest</span><span class="p">(</span><span class="n">i_image</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">user</span><span class="p">,</span>
+                                             <span class="bp">self</span><span class="o">.</span><span class="n">ip</span><span class="p">,</span> <span class="s2">&quot;/tmp/&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">passwd</span><span class="p">)</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="n">l_msg</span> <span class="o">=</span> <span class="s2">&quot;Copying fake.gard file to host failed&quot;</span>
+            <span class="nb">print</span> <span class="n">l_msg</span></div>
+            <span class="k">raise</span> <span class="n">OpTestError</span><span class="p">(</span><span class="n">l_msg</span><span class="p">)</span>
+
+<div class="viewcode-block" id="OpTestHost.host_pflash_get_partition"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_pflash_get_partition">[docs]</a>    <span class="k">def</span> <span class="nf">host_pflash_get_partition</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">partition</span><span class="p">):</span>
+        <span class="n">d</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;pflash --info&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">d</span><span class="p">:</span>
+            <span class="n">s</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">partition</span><span class="p">,</span> <span class="n">line</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">s</span><span class="p">:</span>
+                <span class="n">m</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="sa">r</span><span class="s1">&#39;ID=\d+\s+\S+\s+((0[xX])?[0-9a-fA-F]+)..(0[xX])?[0-9a-fA-F]+\s+\(actual=((0[xX])?[0-9a-fA-F]+)\).*&#39;</span><span class="p">,</span> <span class="n">line</span><span class="p">)</span>
+                <span class="n">offset</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">m</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="mi">16</span><span class="p">)</span>
+                <span class="n">length</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">m</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span> <span class="mi">16</span><span class="p">)</span>
+                <span class="n">ret</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;offset&#39;</span><span class="p">:</span> <span class="n">offset</span><span class="p">,</span> <span class="s1">&#39;length&#39;</span><span class="p">:</span> <span class="n">length</span><span class="p">}</span></div>
+        <span class="k">return</span> <span class="n">ret</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Check that host has a CAPI FPGA card</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return True or False</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_has_capi_fpga_card"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_has_capi_fpga_card">[docs]</a>    <span class="k">def</span> <span class="nf">host_has_capi_fpga_card</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">l_cmd</span> <span class="o">=</span> <span class="s2">&quot;lspci -d </span><span class="se">\&quot;</span><span class="s2">1014:0477</span><span class="se">\&quot;</span><span class="s2">&quot;</span>
+        <span class="n">l_res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="n">l_cmd</span><span class="p">)</span>
+        <span class="n">l_res</span> <span class="o">=</span> <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">l_res</span><span class="p">)</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">l_res</span><span class="o">.</span><span class="fm">__contains__</span><span class="p">(</span><span class="s1">&#39;IBM Device 0477&#39;</span><span class="p">)):</span>
+            <span class="n">l_msg</span> <span class="o">=</span> <span class="s2">&quot;Host has a CAPI FPGA card&quot;</span>
+            <span class="nb">print</span> <span class="n">l_msg</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">l_msg</span> <span class="o">=</span> <span class="s2">&quot;Host has no CAPI FPGA card; skipping test&quot;</span>
+            <span class="nb">print</span> <span class="n">l_msg</span></div>
+            <span class="k">return</span> <span class="kc">False</span>
+
+    <span class="c1">##</span>
+    <span class="c1"># @brief Clone latest cxl-tests git repository in i_dir directory</span>
+    <span class="c1">#</span>
+    <span class="c1"># @param i_dir @type string: directory where cxl-tests will be cloned</span>
+    <span class="c1">#</span>
+    <span class="c1"># @return True or False</span>
+    <span class="c1">#</span>
+<div class="viewcode-block" id="OpTestHost.host_clone_cxl_tests"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_clone_cxl_tests">[docs]</a>    <span class="k">def</span> <span class="nf">host_clone_cxl_tests</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_dir</span><span class="p">):</span>
+        <span class="n">l_msg</span> <span class="o">=</span> <span class="s2">&quot;https://github.com/ibm-capi/cxl-tests.git&quot;</span>
+        <span class="n">l_cmd</span> <span class="o">=</span> <span class="s2">&quot;git clone </span><span class="si">%s</span><span class="s2"> </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">l_msg</span><span class="p">,</span> <span class="n">i_dir</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;git config --global http.sslverify false&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;rm -rf </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">i_dir</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="s2">&quot;mkdir </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">i_dir</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">l_res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="n">l_cmd</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="n">l_msg</span> <span class="o">=</span> <span class="s2">&quot;Cloning cxl-tests git repository is failed&quot;</span></div>
+            <span class="k">return</span> <span class="kc">False</span>
+
+<div class="viewcode-block" id="OpTestHost.host_build_cxl_tests"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_build_cxl_tests">[docs]</a>    <span class="k">def</span> <span class="nf">host_build_cxl_tests</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_dir</span><span class="p">):</span>
+        <span class="n">l_cmd</span> <span class="o">=</span> <span class="s2">&quot;cd </span><span class="si">%s</span><span class="s2">; make&quot;</span> <span class="o">%</span> <span class="n">i_dir</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="n">l_cmd</span><span class="p">)</span>
+        <span class="n">l_cmd</span> <span class="o">=</span> <span class="s2">&quot;test -x </span><span class="si">%s</span><span class="s2">/libcxl/libcxl.so&quot;</span> <span class="o">%</span> <span class="n">i_dir</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="n">l_cmd</span><span class="p">)</span>
+        <span class="n">l_cmd</span> <span class="o">=</span> <span class="s2">&quot;test -x </span><span class="si">%s</span><span class="s2">/libcxl_tests; echo $?&quot;</span> <span class="o">%</span> <span class="n">i_dir</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="n">l_cmd</span><span class="p">)</span>
+        <span class="n">l_cmd</span> <span class="o">=</span> <span class="s2">&quot;test -x </span><span class="si">%s</span><span class="s2">/memcpy_afu_ctx; echo $?&quot;</span> <span class="o">%</span> <span class="n">i_dir</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="n">l_cmd</span><span class="p">)</span>
+
+<div class="viewcode-block" id="OpTestHost.host_check_binary"><a class="viewcode-back" href="../../programming.html#common.OpTestHost.OpTestHost.host_check_binary">[docs]</a>    <span class="k">def</span> <span class="nf">host_check_binary</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i_dir</span><span class="p">,</span> <span class="n">i_file</span><span class="p">):</span>
+        <span class="n">l_cmd</span> <span class="o">=</span> <span class="s2">&quot;test -x </span><span class="si">%s</span><span class="s2">/</span><span class="si">%s</span><span class="s2">;&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">i_dir</span><span class="p">,</span> <span class="n">i_file</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">host_run_command</span><span class="p">(</span><span class="n">l_cmd</span><span class="p">)</span>
+            <span class="n">l_msg</span> <span class="o">=</span> <span class="s2">&quot;Executable file </span><span class="si">%s</span><span class="s2">/</span><span class="si">%s</span><span class="s2"> is available&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">i_dir</span><span class="p">,</span> <span class="n">i_file</span><span class="p">)</span>
+            <span class="nb">print</span> <span class="n">l_msg</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">except</span> <span class="n">CommandFailed</span><span class="p">:</span>
+            <span class="n">l_msg</span> <span class="o">=</span> <span class="s2">&quot;Executable file </span><span class="si">%s</span><span class="s2">/</span><span class="si">%s</span><span class="s2"> is not present&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">i_dir</span><span class="p">,</span> <span class="n">i_file</span><span class="p">)</span>
+            <span class="nb">print</span> <span class="n">l_msg</span></div></div>
+            <span class="k">return</span> <span class="kc">False</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../index.html">op-test-framework</a></h1>
+
+
+
+
+
+
+<p>
+<iframe src="https://ghbtns.com/github-btn.html?user=open-power&repo=op-test-framework&type=watch&count=true&size=large&v=2"
+  allowtransparency="true" frameborder="0" scrolling="0" width="200px" height="35px"></iframe>
+</p>
+
+
+
+
+
+    
+
+<p>
+<a href="https://travis-ci.org/open-power/op-test-framework">
+    <img
+        alt="https://secure.travis-ci.org/open-power/op-test-framework.svg?branch=master"
+        src="https://secure.travis-ci.org/open-power/op-test-framework.svg?branch=master"
+    />
+</a>
+</p>
+
+
+<h3>Navigation</h3>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../user-guide.html">op-test User Guide</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Programming Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../programming.html">Programming Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../programming.html#generic-classes-modules">Generic Classes/Modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../programming.html#bmc-machine-specific">BMC/Machine Specific</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../programming.html#module-testcases.OpTestFlash">Firmware Flashing</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../index.html">Documentation overview</a><ul>
+  <li><a href="../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    </div>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2018, OpenPOWER Foundation.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.7.1</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.10</a>
+      
+    </div>
+
+    
+    <a href="https://github.com/open-power/op-test-framework" class="github">
+        <img style="position: absolute; top: 0; right: 0; border: 0;" src="https://s3.amazonaws.com/github/ribbons/forkme_right_darkblue_121621.png" alt="Fork me on GitHub"  class="github"/>
+    </a>
+    
+
+    
+  </body>
+</html>
